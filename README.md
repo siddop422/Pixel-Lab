@@ -1,36 +1,35 @@
 # Pixel-Lab
 
-A lightweight modern, vibe-coded Photoshop alternative project space.
+A lightweight project space for creative tools and experiments.
 
-## PixelForge — Windows Desktop Edition
+## PixelForge — Windows Desktop Image Editor
 
-The repository now includes **PixelForge**, an offline-first Windows desktop photo-editor starter built with C# and WPF.
+**PixelForge** is an offline-first Windows desktop image editor built with C# and WPF.
 
-Project source: [PixelForge/](PixelForge/)
+- [Open the PixelForge project](PixelForge/)
+- [Read the setup and feature guide](PixelForge/README.md)
 
-### Included in the first implementation
+### Get the Windows EXE — no terminal required
 
-- Import PNG, JPEG, BMP and TIFF images
-- Stack multiple images as layers
-- Toggle layer visibility
-- Fit canvas, zoom in and zoom out
-- Export to PNG, JPEG and BMP
+1. Open the repository's [Actions](../../actions) tab.
+2. Select **Build PixelForge (Windows)**.
+3. Open the latest successful run.
+4. Download the **PixelForge-Windows-x64** artifact and extract the ZIP.
+5. Double-click **PixelForge.exe**.
+
+The build workflow runs automatically when PixelForge source files change on `main`. The EXE is self-contained for 64-bit Windows and does not require users to install .NET.
+
+### Current features
+
+- Import PNG, JPEG, BMP and TIFF images, including drag-and-drop
+- Multiple image layers with live visibility
+- Reorder and remove layers
+- Zoom and fit canvas
+- Export composited images to PNG, JPEG or BMP at original document dimensions
+- Custom logo and Windows app icon
+- Keyboard shortcuts
 - No third-party NuGet packages
 
-### Run on Windows
+Brush, eraser, crop, text, selections, adjustments, project save/load, undo/redo and PSD support remain on the roadmap.
 
-Requirements: Windows 10/11 and the .NET 8 SDK with Windows desktop development support.
-
-```powershell
-cd PixelForge
-dotnet restore
-dotnet run
-```
-
-See [PixelForge/README.md](PixelForge/README.md) for build and publishing instructions.
-
-### Roadmap
-
-Brush and eraser tools, crop, text layers, layer reordering, adjustments, project save/load, and undo/redo are planned.
-
-> This is an early starter implementation and has not yet been validated by a Windows build.
+> PixelForge is an early-stage editor. The Windows workflow builds the app, but it should still be tested on a real Windows PC before treating it as a stable release.

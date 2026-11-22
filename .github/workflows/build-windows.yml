@@ -1,0 +1,52 @@
+name: Build PixelForge (Windows)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'PixelForge/**'
+      - '.github/workflows/build-windows.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Publish single-file Windows app
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore PixelForge/PixelForge.csproj
+
+      - name: Publish self-contained EXE
+        run: >-
+          dotnet publish PixelForge/PixelForge.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:PublishTrimmed=false
+          --output PixelForge/publish
+
+      - name: Package EXE
+        shell: pwsh
+        run: |
+          Compress-Archive -Path PixelForge/publish/PixelForge.exe -DestinationPath PixelForge-Windows-x64.zip -Force
+
+      - name: Upload downloadable app
+        uses: actions/upload-artifact@v4
+        with:
+          name: PixelForge-Windows-x64
+          path: PixelForge-Windows-x64.zip
+          if-no-files-found: error
+          retention-days: 30

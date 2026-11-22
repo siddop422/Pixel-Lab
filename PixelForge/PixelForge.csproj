@@ -1,11 +1,20 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>PixelForge</AssemblyName>
     <RootNamespace>PixelForge</RootNamespace>
+    <ApplicationIcon>Assets\PixelForge.ico</ApplicationIcon>
+    <Version>0.2.0</Version>
+    <Product>PixelForge</Product>
+    <Description>PixelForge — lightweight offline Windows image editor.</Description>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\PixelForge-Logo.png" />
+    <Resource Include="Assets\PixelForge.ico" />
+  </ItemGroup>
 </Project>
