@@ -1,0 +1,6 @@
+publish/
+dist/
+artifacts/
+*.user
+*.suo
+*.tmp

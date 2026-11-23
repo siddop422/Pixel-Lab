@@ -1,0 +1,3 @@
+[submodule "vendor/GameboySharp"]
+	path = vendor/GameboySharp
+	url = https://github.com/sokie/gameboy_sharp.git
