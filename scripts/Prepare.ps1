@@ -146,3 +146,259 @@ $program = $program.Replace('logs/gameboysharp-.log', 'logs/pocketgb-.log')
 [System.IO.File]::WriteAllText($programPath, $program, [System.Text.UTF8Encoding]::new($false))
 
 Write-Host "PocketGB branding and welcome UI prepared." -ForegroundColor Green
+
+
+# ZIP ROM detection and extraction. The archive itself is kept in Recent Games; the extracted ROM
+# is cached in PocketGB's application-data folder so battery saves and save-state slots stay stable.
+$romLoaderPath = Join-Path $vendor "RomFileLoader.cs"
+$romLoaderSource = @'
+using System;
+using System.IO;
+using System.IO.Compression;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
+using Serilog;
+
+namespace GameboySharp
+{
+    internal static class RomFileLoader
+    {
+        private const long MaxRomBytes = 64L * 1024L * 1024L;
+        private static readonly string[] RomExtensions = { ".gb", ".gbc", ".sgb" };
+
+        public static string ResolveRomPath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                throw new ArgumentException("A ROM file path is required.", nameof(path));
+
+            string fullPath = Path.GetFullPath(path);
+            if (!File.Exists(fullPath))
+                throw new FileNotFoundException("The selected game file could not be found.", fullPath);
+
+            string extension = Path.GetExtension(fullPath);
+            if (!extension.Equals(".zip", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!IsRomExtension(extension))
+                    throw new InvalidDataException("PocketGB supports .gb, .gbc, .sgb ROM files and .zip archives containing them.");
+                return fullPath;
+            }
+
+            using ZipArchive archive = ZipFile.OpenRead(fullPath);
+            var candidates = archive.Entries
+                .Where(entry => !string.IsNullOrEmpty(entry.Name))
+                .Where(entry => IsRomExtension(Path.GetExtension(entry.Name)))
+                .Where(entry => entry.Length > 0 && entry.Length <= MaxRomBytes)
+                .OrderBy(entry => entry.FullName.Count(ch => ch == '/' || ch == '\\'))
+                .ThenBy(entry => entry.FullName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (candidates.Count == 0)
+                throw new InvalidDataException("This ZIP archive does not contain a supported .gb, .gbc, or .sgb ROM.");
+
+            if (candidates.Count > 1)
+                Log.Warning("ZIP archive {Archive} contains {Count} Game Boy ROMs. Opening the first entry: {Entry}",
+                    fullPath, candidates.Count, candidates[0].FullName);
+
+            ZipArchiveEntry selected = candidates[0];
+            string identity = fullPath + "|" +
+                File.GetLastWriteTimeUtc(fullPath).Ticks + "|" +
+                selected.FullName + "|" + selected.Length;
+            string hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity))).ToLowerInvariant();
+
+            string localData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (string.IsNullOrWhiteSpace(localData))
+                localData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+
+            string cacheDirectory = Path.Combine(localData, "PocketGB", "rom-cache", hash);
+            string safeName = Path.GetFileName(selected.FullName.Replace('\\', '/'));
+            string destination = Path.Combine(cacheDirectory, safeName);
+
+            if (File.Exists(destination) && new FileInfo(destination).Length == selected.Length)
+                return destination;
+
+            Directory.CreateDirectory(cacheDirectory);
+            string temporary = destination + ".tmp";
+            try
+            {
+                using Stream input = selected.Open();
+                using (var output = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None))
+                {
+                    byte[] buffer = new byte[81920];
+                    long written = 0;
+                    int read;
+                    while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
+                    {
+                        written += read;
+                        if (written > MaxRomBytes)
+                            throw new InvalidDataException("The ROM inside this ZIP is larger than the supported safety limit.");
+                        output.Write(buffer, 0, read);
+                    }
+
+                    if (written != selected.Length)
+                        throw new InvalidDataException("The ROM entry in this ZIP archive was incomplete or corrupt.");
+                }
+
+                File.Move(temporary, destination, true);
+            }
+            finally
+            {
+                if (File.Exists(temporary))
+                    File.Delete(temporary);
+            }
+
+            Log.Information("Opened ROM {Entry} from ZIP archive {Archive}", selected.FullName, fullPath);
+            return destination;
+        }
+
+        private static bool IsRomExtension(string extension) =>
+            RomExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase);
+    }
+}
+'@
+[System.IO.File]::WriteAllText($romLoaderPath, $romLoaderSource, [System.Text.UTF8Encoding]::new($false))
+
+# Let the in-app browser discover direct ROMs and ZIP containers.
+$fileBrowserPath = Join-Path $vendor "UI\FileBrowser.cs"
+$fileBrowser = [System.IO.File]::ReadAllText($fileBrowserPath)
+$fileBrowser = $fileBrowser.Replace(
+    'private static readonly string[] RomExtensions = { ".gb", ".gbc", ".sgb" };',
+    'private static readonly string[] RomExtensions = { ".gb", ".gbc", ".sgb", ".zip" };')
+$fileBrowser = $fileBrowser.Replace(
+    'string name = Path.GetFileName(file);',
+    'string name = Path.GetFileName(file);' + $newLine + '                if (Path.GetExtension(file).Equals(".zip", StringComparison.OrdinalIgnoreCase)) name += "  [ZIP]";')
+$fileBrowser = $fileBrowser.Replace(
+    'ImGui.SetNextWindowPos(viewport.Pos + viewport.Size * 0.5f, ImGuiCond.Appearing, new Vector2(0.5f, 0.5f));' + $newLine + '            ImGui.SetNextWindowSize(new Vector2(640, 460), ImGuiCond.Appearing);',
+    'var dialogSize = new Vector2(Math.Min(760f, Math.Max(320f, viewport.Size.X - 32f)), Math.Min(540f, Math.Max(280f, viewport.Size.Y - 76f)));' + $newLine + '            ImGui.SetNextWindowPos(viewport.Pos + viewport.Size * 0.5f, ImGuiCond.Appearing, new Vector2(0.5f, 0.5f));' + $newLine + '            ImGui.SetNextWindowSize(dialogSize, ImGuiCond.Appearing);')
+[System.IO.File]::WriteAllText($fileBrowserPath, $fileBrowser, [System.Text.UTF8Encoding]::new($false))
+
+# ZIPs also work when dragged directly onto the game window.
+$windowPath = Join-Path $vendor "UI\GameWindow.cs"
+$window = [System.IO.File]::ReadAllText($windowPath)
+$window = $window.Replace('if (extension is ".gb" or ".gbc" or ".sgb")', 'if (extension is ".gb" or ".gbc" or ".sgb" or ".zip")')
+$window = $window.Replace('_emulator.LoadRom(path);', '_emulator.LoadRom(RomFileLoader.ResolveRomPath(path));')
+$window = $window.Replace('ImGui.TextWrapped("Open a legally obtained .gb, .gbc, or .sgb game file to start playing.");', 'ImGui.TextWrapped("Open a .gb, .gbc, or .sgb game, or a ZIP archive that contains one.");')
+
+# Keep the welcome panel centered in the game area below the taller two-row toolbar.
+$oldWelcomeLayout = @'
+            var size = new Vector2(
+                Math.Min(620f, Math.Max(320f, viewport.Size.X - 36f)),
+                Math.Min(390f, Math.Max(280f, viewport.Size.Y - 70f)));
+            var position = viewport.Pos + new Vector2(
+                Math.Max(12f, (viewport.Size.X - size.X) * 0.5f),
+                Math.Max(42f, (viewport.Size.Y - size.Y) * 0.5f));
+'@
+$newWelcomeLayout = @'
+            float availableWidth = Math.Max(220f, viewport.Size.X - 32f);
+            float topInset = Toolbar.HeightPoints + 12f;
+            float availableHeight = Math.Max(220f, viewport.Size.Y - topInset - 16f);
+            var size = new Vector2(Math.Min(620f, availableWidth), Math.Min(390f, availableHeight));
+            var position = viewport.Pos + new Vector2(
+                Math.Max(12f, (viewport.Size.X - size.X) * 0.5f),
+                topInset + Math.Max(0f, (availableHeight - size.Y) * 0.5f));
+'@
+$window = $window.Replace($oldWelcomeLayout, $newWelcomeLayout)
+[System.IO.File]::WriteAllText($windowPath, $window, [System.Text.UTF8Encoding]::new($false))
+
+# Command-line ROM loading follows the same ZIP-aware path as the in-app browser.
+$program = [System.IO.File]::ReadAllText($programPath)
+$program = $program.Replace('emulator.LoadRom(args[0]);', 'emulator.LoadRom(RomFileLoader.ResolveRomPath(args[0]));')
+[System.IO.File]::WriteAllText($programPath, $program, [System.Text.UTF8Encoding]::new($false))
+
+# Reflow toolbar controls into two compact rows. The old single row exceeded the default 640px window,
+# causing controls and the ROM/FPS text to collide.
+$toolbarPath = Join-Path $vendor "UI\Toolbar.cs"
+$toolbar = [System.IO.File]::ReadAllText($toolbarPath)
+$toolbar = $toolbar.Replace('public const float HeightPoints = 34f;', 'public const float HeightPoints = 68f;')
+$drawStart = $toolbar.IndexOf('        public void Draw(double fps)')
+$drawEnd = $toolbar.IndexOf('        /// <summary>Toggles emulation', $drawStart)
+if ($drawStart -lt 0 -or $drawEnd -lt 0) { throw "Could not find the toolbar Draw method to make its layout responsive." }
+$newDraw = @'
+        public void Draw(double fps)
+        {
+            var viewport = ImGui.GetMainViewport();
+            ImGui.SetNextWindowPos(viewport.Pos);
+            ImGui.SetNextWindowSize(new Vector2(viewport.Size.X, HeightPoints));
+
+            const ImGuiWindowFlags flags =
+                ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoMove |
+                ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse |
+                ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoSavedSettings |
+                ImGuiWindowFlags.NoBringToFrontOnFocus;
+
+            ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, 0f);
+            ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 0f);
+            ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(10f, 4f));
+            ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(8f, 3f));
+            ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(6f, 3f));
+
+            if (ImGui.Begin("##toolbar", flags))
+            {
+                CallbackButton("Open", OpenRomRequested);
+                ImGui.SameLine();
+                DrawRecentButton();
+                ImGui.SameLine();
+                DrawPlayPauseButton();
+                ImGui.SameLine();
+                DrawFrameAdvanceButton();
+                ImGui.SameLine();
+                CallbackButton("Reset", ResetRequested);
+                ImGui.SameLine();
+                DrawSpeedButton();
+                ImGui.SameLine();
+                CallbackButton("Settings", OpenSettingsRequested);
+
+                ImGui.NewLine();
+
+                DrawDebugButton();
+                ImGui.SameLine();
+                DrawStateButtons();
+                ImGui.SameLine();
+                DrawStatus(fps);
+            }
+            ImGui.End();
+
+            ImGui.PopStyleVar(5);
+        }
+
+'@
+$toolbar = $toolbar.Substring(0, $drawStart) + $newDraw + $toolbar.Substring($drawEnd)
+$toolbar = $toolbar.Replace('ImGui.Button("Frame Adv")', 'ImGui.Button("Step")')
+$toolbar = $toolbar.Replace('ImGui.Button(visible ? "Hide Debug" : "Show Debug")', 'ImGui.Button(visible ? "Hide Debug" : "Debug")')
+$statusStart = $toolbar.IndexOf('        private void DrawStatus(double fps)')
+$statusEnd = $toolbar.IndexOf('    }' + $newLine + '}', $statusStart)
+if ($statusStart -lt 0 -or $statusEnd -lt 0) { throw "Could not find toolbar status method." }
+$newStatus = @'
+        private void DrawStatus(double fps)
+        {
+            string state = _emulator.IsPaused ? "PAUSED" : "running";
+            int slot = StateManager?.CurrentSlot ?? 0;
+            string turbo = (IsTurboActive?.Invoke() ?? false) ? "  TURBO" : "";
+            string suffix = $"{fps:0} FPS  {state}  slot {slot}{turbo}";
+            float availableWidth = ImGui.GetContentRegionAvail().X;
+            float suffixWidth = ImGui.CalcTextSize(suffix).X;
+            string name = _emulator.CurrentRomName;
+            float nameWidth = Math.Max(0f, availableWidth - suffixWidth - 18f);
+
+            while (name.Length > 4 && ImGui.CalcTextSize(name + " | ").X > nameWidth)
+                name = name.Substring(0, name.Length - 1);
+
+            if (name.Length < _emulator.CurrentRomName.Length && name.Length > 1)
+                name = name.Substring(0, name.Length - 1) + "…";
+
+            if (availableWidth > 20f)
+                ImGui.TextDisabled($"{name} | {suffix}");
+        }
+'@
+$toolbar = $toolbar.Substring(0, $statusStart) + $newStatus + $toolbar.Substring($statusEnd)
+[System.IO.File]::WriteAllText($toolbarPath, $toolbar, [System.Text.UTF8Encoding]::new($false))
+
+# Dialogs scale to the current window instead of extending beyond its edges.
+$settingsPath = Join-Path $vendor "UI\SettingsDialog.cs"
+$settings = [System.IO.File]::ReadAllText($settingsPath)
+$settings = $settings.Replace(
+    'ImGui.SetNextWindowPos(viewport.Pos + viewport.Size * 0.5f, ImGuiCond.Appearing, new Vector2(0.5f, 0.5f));' + $newLine + '            ImGui.SetNextWindowSize(new Vector2(520, 420), ImGuiCond.Appearing);',
+    'var dialogSize = new Vector2(Math.Min(520f, Math.Max(420f, viewport.Size.X - 32f)), Math.Min(420f, Math.Max(320f, viewport.Size.Y - 76f)));' + $newLine + '            ImGui.SetNextWindowPos(viewport.Pos + viewport.Size * 0.5f, ImGuiCond.Appearing, new Vector2(0.5f, 0.5f));' + $newLine + '            ImGui.SetNextWindowSize(dialogSize, ImGuiCond.Appearing);')
+[System.IO.File]::WriteAllText($settingsPath, $settings, [System.Text.UTF8Encoding]::new($false))
+
+Write-Host "PocketGB ZIP ROM loading and responsive UI fixes prepared." -ForegroundColor Green
