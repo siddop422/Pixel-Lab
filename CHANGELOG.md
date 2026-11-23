@@ -14,6 +14,16 @@
 - Reworked the GitHub Actions workflow so normal pushes and pull requests build and test without touching the existing v2.0.0 release. v2.1.0 is published only by an explicit release dispatch or a dedicated release commit message.
 - Added ZIP extraction and byte-for-byte SHA-256 verification to the release packaging step.
 
+
+### CI verification (2026-11-23)
+
+- Windows x64 Debug build: passed with 0 warnings and 0 errors.
+- Windows x64 Release build: passed with 0 warnings and 0 errors.
+- Automated smoke tests: brush/eraser, project save/reopen/overwrite, v2.0 project compatibility and unsafe archive rejection passed.
+- Self-contained single-file EXE publish: passed.
+- ZIP extraction and byte-for-byte SHA-256 verification: passed.
+- The application GUI was not manually tested on a physical Windows desktop.
+
 ### Still not included
 
 Editable vector text, blend modes, masks, PSD support, transform handles, advanced selection tools, non-destructive filters, and GPU acceleration remain out of scope for this version.
