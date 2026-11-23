@@ -171,6 +171,13 @@
                             <Button Content="Down" Click="MoveDown_Click"/>
                             <Button Content="Delete" Click="DeleteSelected_Click"/>
                         </UniformGrid>
+                        <TextBlock Text="Selected layer" FontSize="11"
+                                   Foreground="{StaticResource TextMuted}" Margin="2,12,0,2"/>
+                        <TextBlock x:Name="SelectedLayerText" Text="No layer selected"
+                                   FontSize="12" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="Canvas size" FontSize="11"
+                                   Foreground="{StaticResource TextMuted}" Margin="2,8,0,2"/>
+                        <TextBlock x:Name="CanvasSizeText" Text="—" FontSize="12"/>
 
                         <Border Height="1" Background="#3A3F4B" Margin="0,15,0,13"/>
                         <TextBlock Text="BRUSH &amp; TEXT" FontSize="11" FontWeight="Bold"
