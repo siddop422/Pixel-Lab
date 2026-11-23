@@ -1,4 +1,4 @@
-name: Build PocketGB Windows Release
+name: Build PocketGB Releases
 
 on:
   push:
@@ -10,10 +10,11 @@ permissions:
   contents: write
 
 jobs:
-  build:
-    runs-on: windows-latest
+  test:
+    name: Headless emulator tests
+    runs-on: ubuntu-latest
     steps:
-      - name: Check out PocketGB and emulator source
+      - name: Check out PocketGB and emulator core
         uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -23,70 +24,177 @@ jobs:
         with:
           dotnet-version: 9.0.x
 
-      - name: Apply PocketGB branding and UI
+      - name: Prepare PocketGB source and tests
+        shell: pwsh
+        run: ./scripts/Prepare.ps1
+
+      - name: Run emulator and ROM-loader tests
+        env:
+          GBSHARP_AUDIO: none
+        run: dotnet test ./vendor/GameboySharp/GameboySharp.sln --configuration Release --verbosity normal
+
+  windows:
+    name: Windows x64 installer and portable build
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - name: Check out PocketGB and emulator core
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Prepare PocketGB source
         shell: pwsh
         run: .\scripts\Prepare.ps1
 
-      - name: Publish self-contained Windows x64 app
+      - name: Publish optimized self-contained Windows x64 app
         shell: pwsh
         run: |
-          dotnet publish .\vendor\GameboySharp\GameboySharp.csproj --configuration Release --runtime win-x64 --self-contained true -p:AssemblyName=PocketGB -p:Version=1.0.1 -p:DebugType=none -p:DebugSymbols=false --output .\publish
+          dotnet publish .\vendor\GameboySharp\GameboySharp.csproj --configuration Release --runtime win-x64 --self-contained true -p:AssemblyName=PocketGB -p:Version=1.1.0 -p:PublishReadyToRun=true -p:TieredPGO=true -p:DebugType=none -p:DebugSymbols=false --output .\publish
           if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed" }
 
       - name: Install Inno Setup
         shell: pwsh
         run: choco install innosetup --yes --no-progress
 
-      - name: Build installer
+      - name: Build PocketGB installer
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force .\dist | Out-Null
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion="1.0.1" /DPublishDir="..\publish" .\install\PocketGB.iss
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion="1.1.0" /DPublishDir="..\publish" .\install\PocketGB.iss
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed" }
 
-      - name: Create portable archive
+      - name: Create portable Windows archive
         shell: pwsh
-        run: Compress-Archive -Path .\publish\* -DestinationPath .\dist\PocketGB-Portable-1.0.1.zip -CompressionLevel Optimal
+        run: Compress-Archive -Path .\publish\* -DestinationPath .\dist\PocketGB-Portable-1.1.0.zip -CompressionLevel Optimal
 
-      - name: Upload build files
+      - name: Upload Windows release files
         uses: actions/upload-artifact@v4
         with:
           name: PocketGB-Windows-x64
           path: |
-            dist/PocketGB-Setup-1.0.1.exe
-            dist/PocketGB-Portable-1.0.1.zip
+            dist/PocketGB-Setup-1.1.0.exe
+            dist/PocketGB-Portable-1.1.0.zip
+          if-no-files-found: error
+
+  portable:
+    name: ${{ matrix.name }} portable build
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            rid: linux-x64
+            name: Linux-x64
+            archive: tar.gz
+          - os: macos-15
+            rid: osx-arm64
+            name: macOS-Apple-Silicon
+            archive: tar.gz
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Check out PocketGB and emulator core
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Prepare PocketGB source
+        shell: pwsh
+        run: ./scripts/Prepare.ps1
+
+      - name: Publish optimized self-contained application
+        shell: pwsh
+        run: |
+          dotnet publish ./vendor/GameboySharp/GameboySharp.csproj --configuration Release --runtime ${{ matrix.rid }} --self-contained true -p:AssemblyName=PocketGB -p:Version=1.1.0 -p:PublishReadyToRun=true -p:TieredPGO=true -p:DebugType=none -p:DebugSymbols=false --output ./publish
+          if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed for ${{ matrix.rid }}" }
+
+      - name: Build macOS application bundle
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          APP="PocketGB.app"
+          mkdir -p "$APP/Contents/MacOS"
+          sed -e 's/GameboySharp/PocketGB/g' \
+              -e 's/com.gameboysharp.emulator/com.siddop422.pocketgb/g' \
+              -e 's/__VERSION__/1.1.0/g' \
+              vendor/GameboySharp/build/macos/Info.plist > "$APP/Contents/Info.plist"
+          cp -R publish/. "$APP/Contents/MacOS/"
+          chmod +x "$APP/Contents/MacOS/PocketGB"
+          codesign --force --deep --sign - "$APP"
+          mkdir -p dist/PocketGB-macOS-Apple-Silicon
+          mv "$APP" dist/PocketGB-macOS-Apple-Silicon/
+          cp README.md LICENSE dist/PocketGB-macOS-Apple-Silicon/
+
+      - name: Stage Linux application
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          mkdir -p dist/PocketGB-Linux-x64
+          cp -R publish/. dist/PocketGB-Linux-x64/
+          cp README.md LICENSE dist/PocketGB-Linux-x64/
+          chmod +x dist/PocketGB-Linux-x64/PocketGB
+
+      - name: Create portable archive
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            tar -czf dist/PocketGB-macOS-Apple-Silicon-1.1.0.tar.gz -C dist PocketGB-macOS-Apple-Silicon
+          else
+            tar -czf dist/PocketGB-Linux-x64-1.1.0.tar.gz -C dist PocketGB-Linux-x64
+          fi
+
+      - name: Upload portable release
+        uses: actions/upload-artifact@v4
+        with:
+          name: PocketGB-${{ matrix.name }}
+          path: dist/*.tar.gz
           if-no-files-found: error
 
   release:
-    needs: build
+    name: Publish PocketGB v1.1.0
+    needs: [windows, portable]
     runs-on: ubuntu-latest
     steps:
-      - name: Download Windows artifacts
+      - name: Download all platform builds
         uses: actions/download-artifact@v4
         with:
-          name: PocketGB-Windows-x64
-          path: dist
+          path: artifacts
+
+      - name: List release files
+        run: find artifacts -type f -maxdepth 4
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: pocketgb-v1.0.1
+          tag_name: pocketgb-v1.1.0
           target_commitish: pocketgb-emulator
-          name: PocketGB v1.0.1
+          name: PocketGB v1.1.0
           body: |
-            First PocketGB Windows release.
+            PocketGB 1.1.0 expands compatibility and improves frame pacing and graphics-driver handling.
 
-            - Self-contained Windows x64 installer
-            - Portable ZIP
-            - Game Boy and Game Boy Color support
-            - 10 save-state slots per game
-            - Automatic battery-backed saves
-            - ZIP archive ROM detection and extraction
-            - Responsive two-row toolbar and dialogs
+            - Windows 10/11 x64 installer and portable ZIP
+            - Linux x64 portable build
+            - macOS Apple Silicon portable app bundle
+            - Self-contained .NET runtime and bundled native dependencies
+            - More stable frame pacing with deadline correction and reduced unnecessary CPU waiting
+            - OpenGL shader warnings no longer cause false startup failures
+            - Small-window scaling now keeps the full Game Boy screen visible
+            - ZIP ROM cache uses archive content hashes to prevent stale ROMs
+            - Automated headless tests for ZIP extraction and cache invalidation
 
-            Bring your own legally obtained ROM files.
+            Bring your own legally obtained ROM files. See the README for platform notes.
           draft: false
           prerelease: false
           files: |
-            dist/PocketGB-Setup-1.0.1.exe
-            dist/PocketGB-Portable-1.0.1.zip
+            artifacts/**/*
