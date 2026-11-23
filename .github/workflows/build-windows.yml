@@ -67,17 +67,26 @@ jobs:
           $shaFile = Join-Path $PWD 'PixelForge-Windows-x64.sha256'
           Remove-Item $zip -Force -ErrorAction SilentlyContinue
 
-          $sevenZip = (Get-Command '7z.exe' -ErrorAction SilentlyContinue).Source
-          if (-not $sevenZip -and (Test-Path "$env:ProgramFiles/7-Zip/7z.exe")) {
-            $sevenZip = "$env:ProgramFiles/7-Zip/7z.exe"
+          # Create the ZIP with the built-in .NET Deflate implementation. This avoids
+          # runner-specific 7-Zip command-line differences and guarantees a root-level EXE.
+          Add-Type -AssemblyName System.IO.Compression
+          $zipStream = [System.IO.File]::Create($zip)
+          $archive = [System.IO.Compression.ZipArchive]::new(
+            $zipStream, [System.IO.Compression.ZipArchiveMode]::Create, $true)
+          try {
+            $entry = $archive.CreateEntry(
+              'PixelForge.exe', [System.IO.Compression.CompressionLevel]::Optimal)
+            $source = [System.IO.File]::OpenRead($exe)
+            try {
+              $destination = $entry.Open()
+              try { $source.CopyTo($destination) }
+              finally { $destination.Dispose() }
+            }
+            finally { $source.Dispose() }
           }
-
-          if ($sevenZip) {
-            & $sevenZip a -tzip -mx=9 -ep1 $zip $exe | Out-Host
-            if ($LASTEXITCODE -ne 0) { throw '7-Zip packaging failed.' }
-          }
-          else {
-            Compress-Archive -Path $exe -DestinationPath $zip -CompressionLevel Optimal -Force
+          finally {
+            $archive.Dispose()
+            $zipStream.Dispose()
           }
 
           Add-Type -AssemblyName System.IO.Compression.FileSystem
