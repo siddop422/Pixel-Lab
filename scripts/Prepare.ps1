@@ -675,6 +675,9 @@ public sealed class RomFileLoaderTests : IDisposable
 
     private static void WriteArchive(string path, params (string Name, byte[] Data)[] entries)
     {
+        if (File.Exists(path))
+            File.Delete(path);
+
         using var archive = ZipFile.Open(path, ZipArchiveMode.Create);
         foreach (var item in entries)
         {
