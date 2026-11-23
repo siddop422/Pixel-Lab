@@ -102,7 +102,7 @@ if (-not $window.Contains('private void DrawWelcomeScreen()')) {
                 ImGui.Separator();
                 ImGui.TextDisabled("RECENT GAMES");
 
-                ImGui.BeginChild("##pocketgb-recent-games", new Vector2(0f, 132f), true);
+                ImGui.BeginChild("##pocketgb-recent-games", new Vector2(0f, 132f), ImGuiChildFlags.Borders);
                 if (_config.RecentRoms.Count == 0)
                 {
                     ImGui.TextDisabled("No recent games yet. Load your first ROM to begin.");
