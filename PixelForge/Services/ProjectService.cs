@@ -1,3 +1,4 @@
+using System.IO;
 using PixelForge.Models;
 using System.Buffers.Binary;
 using System.IO.Compression;
