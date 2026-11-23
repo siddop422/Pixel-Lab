@@ -28,3 +28,6 @@ Open the PixelForge v2.0.0 Release and download PixelForge.exe. Double-click it 
 Open PixelForge in Visual Studio with the .NET 10 desktop workload. See the PixelForge project guide for details.
 
 PixelForge runs locally. Images and project files are not uploaded to an online service by the application.
+
+
+Latest source updates are published from main. The Windows EXE and ZIP are attached to the v2.0.0 GitHub Release after its build passes.
