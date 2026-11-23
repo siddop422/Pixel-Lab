@@ -282,7 +282,7 @@ $fileBrowser = $fileBrowser.Replace(
 $windowPath = Join-Path $vendor "UI/GameWindow.cs"
 $window = [System.IO.File]::ReadAllText($windowPath)
 $window = $window.Replace('if (extension is ".gb" or ".gbc" or ".sgb")', 'if (extension is ".gb" or ".gbc" or ".sgb" or ".zip")')
-$window = $window.Replace('_emulator.LoadRom(path);', '_emulator.LoadRom(RomFileLoader.ResolveRomPath(path));')
+$window = $window.Replace('_emulator.LoadRom(path);', '_emulator.LoadRom(RomFileLoader.ResolveRomPath(path), path);')
 $window = $window.Replace('ImGui.TextWrapped("Open a legally obtained .gb, .gbc, or .sgb game file to start playing.");', 'ImGui.TextWrapped("Open a .gb, .gbc, or .sgb game, or a ZIP archive that contains one.");')
 
 # Keep the welcome panel centered in the game area below the taller two-row toolbar.
@@ -308,7 +308,7 @@ $window = $window.Replace($oldWelcomeLayout, $newWelcomeLayout)
 
 # Command-line ROM loading follows the same ZIP-aware path as the in-app browser.
 $program = [System.IO.File]::ReadAllText($programPath)
-$program = $program.Replace('emulator.LoadRom(args[0]);', 'emulator.LoadRom(RomFileLoader.ResolveRomPath(args[0]));')
+$program = $program.Replace('emulator.LoadRom(args[0]);', 'emulator.LoadRom(RomFileLoader.ResolveRomPath(args[0]), args[0]);')
 [System.IO.File]::WriteAllText($programPath, $program, [System.Text.UTF8Encoding]::new($false))
 
 # Reflow toolbar controls into two compact rows. The old single row exceeded the default 640px window,
@@ -696,3 +696,35 @@ public sealed class RomFileLoaderTests : IDisposable
     [System.IO.File]::WriteAllText($testPath, $romLoaderTests, [System.Text.UTF8Encoding]::new($false))
 }
 Write-Host "PocketGB compatibility, frame pacing, graphics diagnostics and ROM tests prepared." -ForegroundColor Green
+
+
+# Keep user save files beside the original archive for ZIP-launched games, not in the hidden cache.
+$emulatorPath = Join-Path $vendor "Emulator.cs"
+$emulatorSource = [System.IO.File]::ReadAllText($emulatorPath)
+$emulatorSource = $emulatorSource.Replace(
+    'public void LoadRom(string path)',
+    'public void LoadRom(string path, string? saveIdentityPath = null)')
+$emulatorSource = $emulatorSource.Replace(
+    'CurrentRomPath = path;',
+    'CurrentRomPath = string.IsNullOrWhiteSpace(saveIdentityPath) ? Path.GetFullPath(path) : Path.GetFullPath(saveIdentityPath);')
+if (-not $emulatorSource.Contains('saveIdentityPath')) { throw "Could not add the original-file save path to Emulator.LoadRom." }
+[System.IO.File]::WriteAllText($emulatorPath, $emulatorSource, [System.Text.UTF8Encoding]::new($false))
+
+$windowSource = [System.IO.File]::ReadAllText($windowPath)
+$windowSource = $windowSource.Replace(
+    '_emulator.LoadRom(RomFileLoader.ResolveRomPath(path));',
+    '_emulator.LoadRom(RomFileLoader.ResolveRomPath(path), path);')
+if (-not $windowSource.Contains('_emulator.LoadRom(RomFileLoader.ResolveRomPath(path), path);')) {
+    throw "Could not connect ZIP source paths to UI game loading."
+}
+[System.IO.File]::WriteAllText($windowPath, $windowSource, [System.Text.UTF8Encoding]::new($false))
+
+$programFinal = [System.IO.File]::ReadAllText($programPath)
+$programFinal = $programFinal.Replace(
+    'emulator.LoadRom(RomFileLoader.ResolveRomPath(args[0]));',
+    'emulator.LoadRom(RomFileLoader.ResolveRomPath(args[0]), args[0]);')
+if (-not $programFinal.Contains('emulator.LoadRom(RomFileLoader.ResolveRomPath(args[0]), args[0]);')) {
+    throw "Could not connect ZIP source paths to command-line game loading."
+}
+[System.IO.File]::WriteAllText($programPath, $programFinal, [System.Text.UTF8Encoding]::new($false))
+Write-Host "ZIP games now keep battery saves and save states beside the original archive." -ForegroundColor Green
