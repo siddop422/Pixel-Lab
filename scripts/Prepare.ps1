@@ -655,10 +655,11 @@ public sealed class RomFileLoaderTests : IDisposable
     [Fact]
     public void InvalidatesCacheWhenArchiveBytesChange()
     {
-        string zip = CreateArchive(("game.gb", new byte[] { 0x01, 0x02, 0x03 }));
+        string zip = Path.Combine(_root, "replace-in-place.zip");
+        WriteArchive(zip, ("game.gb", new byte[] { 0x01, 0x02, 0x03 }));
         string firstPath = RomFileLoader.ResolveRomPath(zip);
 
-        CreateArchive(("game.gb", new byte[] { 0x04, 0x05, 0x06 }));
+        WriteArchive(zip, ("game.gb", new byte[] { 0x04, 0x05, 0x06 }));
         string secondPath = RomFileLoader.ResolveRomPath(zip);
 
         Assert.NotEqual(firstPath, secondPath);
@@ -668,6 +669,12 @@ public sealed class RomFileLoaderTests : IDisposable
     private string CreateArchive(params (string Name, byte[] Data)[] entries)
     {
         string path = Path.Combine(_root, "test-" + Guid.NewGuid().ToString("N") + ".zip");
+        WriteArchive(path, entries);
+        return path;
+    }
+
+    private static void WriteArchive(string path, params (string Name, byte[] Data)[] entries)
+    {
         using var archive = ZipFile.Open(path, ZipArchiveMode.Create);
         foreach (var item in entries)
         {
@@ -675,7 +682,6 @@ public sealed class RomFileLoaderTests : IDisposable
             using var output = entry.Open();
             output.Write(item.Data, 0, item.Data.Length);
         }
-        return path;
     }
 
     public void Dispose()
