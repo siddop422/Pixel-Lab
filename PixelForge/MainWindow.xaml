@@ -173,7 +173,7 @@
                         </UniformGrid>
 
                         <Border Height="1" Background="#3A3F4B" Margin="0,15,0,13"/>
-                        <TextBlock Text="BRUSH & TEXT" FontSize="11" FontWeight="Bold"
+                        <TextBlock Text="BRUSH &amp; TEXT" FontSize="11" FontWeight="Bold"
                                    Foreground="{StaticResource TextMuted}" Margin="2,0,0,9"/>
                         <DockPanel Margin="0,0,0,5">
                             <TextBlock Text="Color (hex)" FontSize="11"
