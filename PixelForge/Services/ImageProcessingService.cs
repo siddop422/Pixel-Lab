@@ -10,7 +10,8 @@ public static class ImageProcessingService
     {
         ArgumentNullException.ThrowIfNull(source);
         var converted = new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
-        converted.Freeze();
+        // Do not freeze this wrapper: WPF may recursively freeze its source, which
+        // would make a caller-owned WriteableBitmap impossible to edit afterward.
         stride = checked(converted.PixelWidth * 4);
         var pixels = new byte[checked(stride * converted.PixelHeight)];
         converted.CopyPixels(pixels, stride, 0);
