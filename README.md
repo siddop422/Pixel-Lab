@@ -9,7 +9,7 @@ Open the [PocketGB Releases](https://github.com/siddop422/Pixel-Lab/releases) pa
 - **PocketGB-Setup-1.0.0.exe** — normal Windows installer; adds Start Menu and optional desktop shortcuts.
 - **PocketGB-Portable-1.0.0.zip** — extract and run without installing.
 
-The Windows build is self-contained. You do not need to install .NET separately.
+The Windows build is self-contained. You do not need to install .NET separately. The current build also applies the compatibility fix for ImGui.NET 1.91.
 
 ## Features
 
