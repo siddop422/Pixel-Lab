@@ -24,7 +24,7 @@ xattr -dr com.apple.quarantine PocketGB.app
 - Game Boy (DMG) and Game Boy Color (CGB) emulation.
 - ROM browser, drag-and-drop and recent games.
 - Direct .gb, .gbc, and .sgb loading, plus ZIP archives containing supported ROMs.
-- ZIP extraction is cached safely; replacing an archive with another ROM invalidates the old cache.
+- ZIP extraction is cached safely; replacing an archive with another ROM invalidates the old cache. Battery saves and save states are kept beside the original ZIP, not inside the cache.
 - Ten save-state slots per game, with thumbnails and timestamps.
 - Quick save (F5) and quick load (F8); number keys 0–9 select the active slot.
 - Automatic battery-backed cartridge saves (.sav), including MBC3 RTC data.
