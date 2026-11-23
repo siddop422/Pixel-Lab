@@ -1,9 +1,9 @@
 $ErrorActionPreference = "Stop"
 
 $root = Split-Path -Parent $PSScriptRoot
-$vendor = Join-Path $root "vendor\GameboySharp"
-$windowPath = Join-Path $vendor "UI\GameWindow.cs"
-$configPath = Join-Path $vendor "Config\ConfigStore.cs"
+$vendor = Join-Path $root "vendor/GameboySharp"
+$windowPath = Join-Path $vendor "UI/GameWindow.cs"
+$configPath = Join-Path $vendor "Config/ConfigStore.cs"
 $programPath = Join-Path $vendor "Program.cs"
 
 foreach ($path in @($windowPath, $configPath, $programPath)) {
@@ -201,9 +201,15 @@ namespace GameboySharp
                     fullPath, candidates.Count, candidates[0].FullName);
 
             ZipArchiveEntry selected = candidates[0];
-            string identity = fullPath + "|" +
-                File.GetLastWriteTimeUtc(fullPath).Ticks + "|" +
-                selected.FullName + "|" + selected.Length;
+            string archiveHash;
+            using (FileStream archiveStream = File.OpenRead(fullPath))
+            {
+                archiveHash = Convert.ToHexString(SHA256.HashData(archiveStream)).ToLowerInvariant();
+            }
+
+            // Hash the archive bytes, not only its timestamp and entry length: copied/replaced ZIPs
+            // can preserve timestamps and lengths while containing a different game.
+            string identity = archiveHash + "|" + selected.FullName + "|" + selected.Length;
             string hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity))).ToLowerInvariant();
 
             string localData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -259,7 +265,7 @@ namespace GameboySharp
 [System.IO.File]::WriteAllText($romLoaderPath, $romLoaderSource, [System.Text.UTF8Encoding]::new($false))
 
 # Let the in-app browser discover direct ROMs and ZIP containers.
-$fileBrowserPath = Join-Path $vendor "UI\FileBrowser.cs"
+$fileBrowserPath = Join-Path $vendor "UI/FileBrowser.cs"
 $fileBrowser = [System.IO.File]::ReadAllText($fileBrowserPath)
 $fileBrowser = $fileBrowser.Replace(
     'private static readonly string[] RomExtensions = { ".gb", ".gbc", ".sgb" };',
@@ -273,7 +279,7 @@ $fileBrowser = $fileBrowser.Replace(
 [System.IO.File]::WriteAllText($fileBrowserPath, $fileBrowser, [System.Text.UTF8Encoding]::new($false))
 
 # ZIPs also work when dragged directly onto the game window.
-$windowPath = Join-Path $vendor "UI\GameWindow.cs"
+$windowPath = Join-Path $vendor "UI/GameWindow.cs"
 $window = [System.IO.File]::ReadAllText($windowPath)
 $window = $window.Replace('if (extension is ".gb" or ".gbc" or ".sgb")', 'if (extension is ".gb" or ".gbc" or ".sgb" or ".zip")')
 $window = $window.Replace('_emulator.LoadRom(path);', '_emulator.LoadRom(RomFileLoader.ResolveRomPath(path));')
@@ -307,7 +313,7 @@ $program = $program.Replace('emulator.LoadRom(args[0]);', 'emulator.LoadRom(RomF
 
 # Reflow toolbar controls into two compact rows. The old single row exceeded the default 640px window,
 # causing controls and the ROM/FPS text to collide.
-$toolbarPath = Join-Path $vendor "UI\Toolbar.cs"
+$toolbarPath = Join-Path $vendor "UI/Toolbar.cs"
 $toolbar = [System.IO.File]::ReadAllText($toolbarPath)
 $toolbar = $toolbar.Replace('public const float HeightPoints = 34f;', 'public const float HeightPoints = 68f;')
 $drawStart = $toolbar.IndexOf('        public void Draw(double fps)')
@@ -394,7 +400,7 @@ $toolbar = $toolbar.Substring(0, $statusStart) + $newStatus + $toolbar.Substring
 [System.IO.File]::WriteAllText($toolbarPath, $toolbar, [System.Text.UTF8Encoding]::new($false))
 
 # Dialogs scale to the current window instead of extending beyond its edges.
-$settingsPath = Join-Path $vendor "UI\SettingsDialog.cs"
+$settingsPath = Join-Path $vendor "UI/SettingsDialog.cs"
 $settings = [System.IO.File]::ReadAllText($settingsPath)
 $settings = $settings.Replace(
     'ImGui.SetNextWindowPos(viewport.Pos + viewport.Size * 0.5f, ImGuiCond.Appearing, new Vector2(0.5f, 0.5f));' + $newLine + '            ImGui.SetNextWindowSize(new Vector2(520, 420), ImGuiCond.Appearing);',
@@ -402,3 +408,291 @@ $settings = $settings.Replace(
 [System.IO.File]::WriteAllText($settingsPath, $settings, [System.Text.UTF8Encoding]::new($false))
 
 Write-Host "PocketGB ZIP ROM loading and responsive UI fixes prepared." -ForegroundColor Green
+
+
+# Compatibility and performance hardening.
+# Use a drift-resistant frame deadline instead of restarting a stopwatch every loop. The short final
+# spin keeps timing precise without busy-waiting for the whole frame on low-power CPUs.
+$programSource = @'
+using GameboySharp;
+using Serilog;
+using Serilog.Events;
+using System.Diagnostics;
+
+public class Program
+{
+    public static void Main(string[] args)
+    {
+        Log.Logger = new LoggerConfiguration()
+            .MinimumLevel.Information()
+            .Enrich.FromLogContext()
+            .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}", restrictedToMinimumLevel: LogEventLevel.Information)
+            .WriteTo.File(
+                path: "logs/pocketgb-.log",
+                rollingInterval: RollingInterval.Day,
+                retainedFileCountLimit: 7,
+                shared: true,
+                outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
+            .CreateLogger();
+
+        var config = ConfigStore.Load();
+
+        Log.Information("Initializing PocketGB...");
+        using var emulator = new Emulator(config);
+
+        if (args.Length > 0)
+        {
+            try
+            {
+                emulator.LoadRom(RomFileLoader.ResolveRomPath(args[0]));
+                config.AddRecentRom(args[0]);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Failed to load game file at '{Path}'. Open another game from the toolbar.", args[0]);
+            }
+        }
+
+        Log.Information("Creating windows...");
+        using var gameWindow = new GameWindow(emulator, config);
+        using var debugWindow = new DebugWindow(emulator);
+
+        debugWindow.SilkWindow.IsVisible = false;
+        gameWindow.Toolbar.IsDebugWindowVisible = () => debugWindow.SilkWindow.IsVisible;
+        gameWindow.Toolbar.ToggleDebugWindow = () =>
+            debugWindow.SilkWindow.IsVisible = !debugWindow.SilkWindow.IsVisible;
+
+        bool shuttingDown = false;
+        void ShutDownBothWindows()
+        {
+            if (shuttingDown) return;
+            shuttingDown = true;
+            gameWindow.SilkWindow.Close();
+            debugWindow.SilkWindow.Close();
+        }
+        gameWindow.SilkWindow.Closing += ShutDownBothWindows;
+        debugWindow.SilkWindow.Closing += ShutDownBothWindows;
+
+        Log.Information("Starting main loop...");
+        long nextFrameDeadline = Stopwatch.GetTimestamp();
+
+        while (!gameWindow.SilkWindow.IsClosing && !debugWindow.SilkWindow.IsClosing)
+        {
+            gameWindow.SilkWindow.DoEvents();
+            debugWindow.SilkWindow.DoEvents();
+
+            gameWindow.SilkWindow.DoUpdate();
+            emulator.RunFrame();
+
+            // The debug view uploads many tile textures. Keep it completely out of the hot path
+            // while hidden; only ask Silk to render it when the user has opened it.
+            gameWindow.SilkWindow.DoRender();
+            if (debugWindow.SilkWindow.IsVisible)
+                debugWindow.SilkWindow.DoRender();
+
+            if (gameWindow.TurboActive)
+            {
+                // Do not carry a stale normal-speed deadline into fast-forward mode.
+                nextFrameDeadline = Stopwatch.GetTimestamp();
+                continue;
+            }
+
+            double speed = Math.Max(0.1, config.General.SpeedMultiplier);
+            long frameInterval = Math.Max(1L, (long)Math.Round(
+                Stopwatch.Frequency / (GameboyConstants.FramesPerSecond * speed)));
+
+            nextFrameDeadline += frameInterval;
+            long now = Stopwatch.GetTimestamp();
+
+            // If the machine fell several frames behind, drop the stale deadline rather than trying
+            // to execute a burst of catch-up frames that makes input and audio feel worse.
+            if (now - nextFrameDeadline > frameInterval * 3L)
+            {
+                nextFrameDeadline = now;
+            }
+
+            long remaining = nextFrameDeadline - now;
+            if (remaining > Stopwatch.Frequency / 1000)
+            {
+                double remainingMs = remaining * 1000.0 / Stopwatch.Frequency;
+                int coarseSleepMs = (int)Math.Floor(remainingMs - 1.0);
+                if (coarseSleepMs > 0)
+                    Thread.Sleep(coarseSleepMs);
+            }
+
+            // Only the final millisecond is a short spin; the rest of each frame is sleep-paced.
+            while ((remaining = nextFrameDeadline - Stopwatch.GetTimestamp()) > 0)
+                Thread.SpinWait(8);
+        }
+
+        Log.Information("Closing PocketGB.");
+        ConfigStore.Save(config);
+    }
+}
+'@
+[System.IO.File]::WriteAllText($programPath, $programSource, [System.Text.UTF8Encoding]::new($false))
+
+# Some OpenGL drivers emit non-fatal compiler diagnostics. A non-empty info log is not proof that
+# compilation failed; inspect GL_COMPILE_STATUS and surface warnings without aborting the emulator.
+$screenRendererPath = Join-Path $vendor "UI/ScreenRenderer.cs"
+$screenRenderer = [System.IO.File]::ReadAllText($screenRendererPath)
+$oldShaderCompile = @'
+            string infoLog = _gl.GetShaderInfoLog(shader);
+            if (!string.IsNullOrWhiteSpace(infoLog))
+            {
+                throw new Exception($"Error compiling {type}: {infoLog}");
+            }
+            return shader;
+'@
+$newShaderCompile = @'
+            _gl.GetShader(shader, GLEnum.CompileStatus, out var compileStatus);
+            string infoLog = _gl.GetShaderInfoLog(shader);
+            if (compileStatus == 0)
+            {
+                _gl.DeleteShader(shader);
+                throw new Exception($"Error compiling {type}: {infoLog}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(infoLog))
+            {
+                Serilog.Log.Warning("OpenGL {ShaderType} shader compiler reported: {InfoLog}", type, infoLog);
+            }
+
+            return shader;
+'@
+if (-not $screenRenderer.Contains($oldShaderCompile)) { throw "Could not find the shader compile check in ScreenRenderer.cs." }
+$screenRenderer = $screenRenderer.Replace($oldShaderCompile, $newShaderCompile)
+$oldLinkFailure = @'
+            if (status == 0)
+            {
+                throw new Exception($"Error linking shader program: {_gl.GetProgramInfoLog(program)}");
+            }
+
+            _gl.DeleteShader(vertexShader);
+            _gl.DeleteShader(fragmentShader);
+            return program;
+'@
+$newLinkFailure = @'
+            if (status == 0)
+            {
+                string infoLog = _gl.GetProgramInfoLog(program);
+                _gl.DeleteProgram(program);
+                _gl.DeleteShader(vertexShader);
+                _gl.DeleteShader(fragmentShader);
+                throw new Exception($"Error linking shader program: {infoLog}");
+            }
+
+            _gl.DeleteShader(vertexShader);
+            _gl.DeleteShader(fragmentShader);
+            return program;
+'@
+if (-not $screenRenderer.Contains($oldLinkFailure)) { throw "Could not find the shader link check in ScreenRenderer.cs." }
+$screenRenderer = $screenRenderer.Replace($oldLinkFailure, $newLinkFailure)
+[System.IO.File]::WriteAllText($screenRendererPath, $screenRenderer, [System.Text.UTF8Encoding]::new($false))
+
+# On small or highly scaled displays, preserve the full 160x144 image by allowing fractional
+# downscaling when an integer scale would be smaller than 1x (instead of overflowing the toolbar).
+$windowPath = Join-Path $vendor "UI/GameWindow.cs"
+$window = [System.IO.File]::ReadAllText($windowPath)
+$oldScale = 'scale = Math.Max(1f, MathF.Floor(scale));'
+if (-not $window.Contains($oldScale)) { throw "Could not find the integer scaling clamp in GameWindow.cs." }
+$window = $window.Replace($oldScale, 'scale = scale >= 1f ? MathF.Floor(scale) : scale;')
+[System.IO.File]::WriteAllText($windowPath, $window, [System.Text.UTF8Encoding]::new($false))
+
+# Add headless tests for ZIP ROM loading and cache invalidation. The source is generated at build
+# time because the emulator core is pinned as a Git submodule.
+$testsDirectory = Join-Path $vendor "GameboySharp.Tests"
+if (Test-Path $testsDirectory) {
+    $romLoaderTests = @'
+using System.IO.Compression;
+using GameboySharp;
+using Xunit;
+
+namespace GameboySharp.Tests;
+
+public sealed class RomFileLoaderTests : IDisposable
+{
+    private readonly string _root = Path.Combine(Path.GetTempPath(), "PocketGB-RomTests", Guid.NewGuid().ToString("N"));
+
+    public RomFileLoaderTests()
+    {
+        Directory.CreateDirectory(_root);
+    }
+
+    [Fact]
+    public void ResolvesSupportedRomFromZip()
+    {
+        byte[] expected = { 0x01, 0x02, 0x03, 0x04 };
+        string zip = CreateArchive(("games/title.gbc", expected));
+
+        string resolved = RomFileLoader.ResolveRomPath(zip);
+
+        Assert.Equal(expected, File.ReadAllBytes(resolved));
+        Assert.EndsWith(".gbc", resolved, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void SelectsFirstRootRomInStableAlphabeticalOrder()
+    {
+        string zip = CreateArchive(
+            ("zeta.gb", new byte[] { 0x09 }),
+            ("alpha.gb", new byte[] { 0x01 }),
+            ("folder/nested.gbc", new byte[] { 0x02 }));
+
+        string resolved = RomFileLoader.ResolveRomPath(zip);
+
+        Assert.Equal(new byte[] { 0x01 }, File.ReadAllBytes(resolved));
+    }
+
+    [Fact]
+    public void RejectsZipWithoutSupportedRom()
+    {
+        string zip = CreateArchive(("readme.txt", new byte[] { 0x52 }));
+
+        Assert.Throws<InvalidDataException>(() => RomFileLoader.ResolveRomPath(zip));
+    }
+
+    [Fact]
+    public void InvalidatesCacheWhenArchiveBytesChange()
+    {
+        string zip = CreateArchive(("game.gb", new byte[] { 0x01, 0x02, 0x03 }));
+        string firstPath = RomFileLoader.ResolveRomPath(zip);
+
+        CreateArchive(("game.gb", new byte[] { 0x04, 0x05, 0x06 }));
+        string secondPath = RomFileLoader.ResolveRomPath(zip);
+
+        Assert.NotEqual(firstPath, secondPath);
+        Assert.Equal(new byte[] { 0x04, 0x05, 0x06 }, File.ReadAllBytes(secondPath));
+    }
+
+    private string CreateArchive(params (string Name, byte[] Data)[] entries)
+    {
+        string path = Path.Combine(_root, "test-" + Guid.NewGuid().ToString("N") + ".zip");
+        using var archive = ZipFile.Open(path, ZipArchiveMode.Create);
+        foreach (var item in entries)
+        {
+            var entry = archive.CreateEntry(item.Name, CompressionLevel.Optimal);
+            using var output = entry.Open();
+            output.Write(item.Data, 0, item.Data.Length);
+        }
+        return path;
+    }
+
+    public void Dispose()
+    {
+        try
+        {
+            if (Directory.Exists(_root))
+                Directory.Delete(_root, recursive: true);
+        }
+        catch
+        {
+            // Test cleanup should not hide the actual assertion result.
+        }
+    }
+}
+'@
+    $testPath = Join-Path $testsDirectory "RomFileLoaderTests.cs"
+    [System.IO.File]::WriteAllText($testPath, $romLoaderTests, [System.Text.UTF8Encoding]::new($false))
+}
+Write-Host "PocketGB compatibility, frame pacing, graphics diagnostics and ROM tests prepared." -ForegroundColor Green
