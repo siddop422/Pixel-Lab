@@ -1,4 +1,4 @@
-name: Build PixelForge (Windows)
+name: Build PixelForge Windows + Release
 
 on:
   push:
@@ -9,11 +9,11 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
-    name: Publish single-file Windows app
+    name: Build, package and release PixelForge
     runs-on: windows-latest
     steps:
       - name: Check out source
@@ -43,10 +43,36 @@ jobs:
         run: |
           Compress-Archive -Path PixelForge/publish/PixelForge.exe -DestinationPath PixelForge-Windows-x64.zip -Force
 
-      - name: Upload downloadable app
+      - name: Upload Actions artifact
         uses: actions/upload-artifact@v4
         with:
           name: PixelForge-Windows-x64
           path: PixelForge-Windows-x64.zip
           if-no-files-found: error
           retention-days: 30
+
+      - name: Create PixelForge v2 GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v2.0.0
+          target_commitish: ${{ github.sha }}
+          name: PixelForge v2.0.0
+          body: |
+            ## PixelForge 2.0 — Windows Desktop Edition
+
+            This release adds the first complete editing workflow:
+            - Brush and transparent eraser with adjustable size and color
+            - Text layers and crop tool
+            - Brightness, contrast and saturation adjustments
+            - Undo/redo and editable PFX projects
+            - Layer controls, drag-and-drop and full-resolution export
+            - Customizable accent color and persistent editor settings
+
+            For users: download PixelForge.exe below and double-click it. No terminal or separate .NET install is required. The ZIP is provided as an alternative.
+          files: |
+            PixelForge/publish/PixelForge.exe
+            PixelForge-Windows-x64.zip
+          fail_on_unmatched_files: true
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

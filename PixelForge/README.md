@@ -1,57 +1,63 @@
-# PixelForge — Windows Desktop Edition
+# PixelForge 2.0 — Windows Desktop Image Editor
 
-PixelForge is a lightweight, offline-first Windows image editor built with C# and WPF. The app uses built-in .NET/WPF APIs and has no third-party NuGet dependencies.
+PixelForge is an offline-first Windows image editor built with C# and WPF. It uses built-in .NET APIs and has no third-party NuGet packages.
 
-## Start the app
+## Download and start
 
-End users do **not** need to open a terminal.
+1. Open the PixelForge v2.0.0 Release.
+2. Download PixelForge.exe (or the ZIP if preferred).
+3. If you downloaded the ZIP, extract it.
+4. Double-click PixelForge.exe.
 
-1. Download the latest `PixelForge-Windows-x64` artifact from the repository's **Actions → Build PixelForge (Windows)** workflow.
-2. Extract `PixelForge-Windows-x64.zip`.
-3. Double-click `PixelForge.exe`.
+No terminal, Python, Visual Studio, or separate .NET installation is required. This release targets 64-bit Windows.
 
-The build is self-contained for 64-bit Windows and includes the .NET runtime.
+## Editing features
 
-## Build from Visual Studio
-
-- Windows 10/11, x64
-- Visual Studio 2022 with the .NET desktop development workload
-- .NET 10 SDK
-
-Open `PixelForge.csproj` and press **F5** to run the development build. For a distributable EXE, use the `Windows-x64` publish profile in `Properties/PublishProfiles`.
-
-## Working features
-
-- Custom PixelForge logo and Windows application icon
 - Import PNG, JPEG, BMP and TIFF images
-- Drag-and-drop image importing
-- Multiple image layers
-- Live layer visibility toggles
-- Move layers up/down and remove the selected layer
-- Fit canvas, zoom in and zoom out
-- Export composited layers as PNG, JPEG or BMP
-- Export always uses the original document dimensions, not the current zoom
-- Keyboard shortcuts: Ctrl+O (open), Ctrl+E (export), Delete (remove layer), Ctrl+Up/Down (reorder)
-- Local-only workflow; imported images are not uploaded anywhere
+- Drag-and-drop importing
+- Multiple image layers with live visibility
+- Move layers up/down and delete a layer
+- Brush with adjustable size and color
+- Eraser with transparent pixel erasing
+- Text tool that creates an independent text layer
+- Crop tool that crops every layer together
+- Brightness, contrast and saturation adjustments on the selected layer
+- Undo and redo for brush, eraser, text, crop and adjustments (last five edits)
+- Save and reopen editable PFX projects
+- Export the visible composite to PNG, JPEG or BMP at original canvas dimensions
+- Zoom and fit view
+- Custom accent color, brush color, brush size and text size; settings persist locally
+- Keyboard shortcuts
 
-## Performance notes
+## Keyboard shortcuts
 
-- No third-party packages or browser engine.
-- WPF and .NET provide the UI and image codec support.
-- Imported bitmaps are loaded once and frozen for safe rendering.
-- Export composites the document directly at its original pixel dimensions.
-- The automated Windows publish uses a self-contained single-file build.
+| Shortcut | Action |
+|---|---|
+| Ctrl+O | Open images |
+| Ctrl+Shift+O | Open PFX project |
+| Ctrl+S | Save PFX project |
+| Ctrl+E | Export image |
+| Ctrl+Z / Ctrl+Y | Undo / redo |
+| B / E / T / C | Brush / Eraser / Text / Crop |
+| Delete | Remove selected layer |
+| Ctrl+Up / Ctrl+Down | Reorder layer |
 
-Large, high-resolution images still require memory proportional to their pixel dimensions. For best performance on low-memory PCs, close other heavy applications and work with moderate-sized source images.
+## Performance and privacy
 
-## Planned features
+- No third-party NuGet packages, embedded browser or cloud service.
+- Images are decoded once and frozen for WPF rendering.
+- Brush strokes update only the affected pixel region.
+- Undo history is limited to five edit operations to constrain memory use.
+- Export renders at original document pixel dimensions, independently of editor zoom.
+- Project files are ZIP containers containing a JSON manifest and PNG layer images.
+- All image processing stays on the local PC.
 
-Brush and eraser tools, crop, text layers, selections, masks, adjustment layers, blend modes, project save/load, undo/redo, and PSD support are not implemented yet. The corresponding toolbar buttons are intentionally disabled until those tools work.
+Very large images still consume substantial RAM. On 4 GB systems, use fewer moderate-sized layers and close other memory-heavy applications.
 
-## Project structure
+## Build from source
 
-- `MainWindow.xaml` — editor workspace and panels
-- `MainWindow.xaml.cs` — UI actions, import, layers, shortcuts and zoom
-- `Models/EditorLayer.cs` — observable image-layer model
-- `Services/ImageExportService.cs` — full-resolution layer compositing and export
-- `Assets/` — app logo and Windows icon
+Requirements: Windows 10/11 x64 and the .NET 10 SDK with WPF desktop support. Open PixelForge.csproj in Visual Studio and press F5. The GitHub Actions workflow publishes a self-contained single-file EXE and attaches it to the GitHub Release.
+
+## Current limitations
+
+PixelForge is a growing editor, not a full Photoshop replacement. PSD import/export, masks, blend modes, transform handles, curves, selection feathering and GPU-accelerated filters are not included in v2.0.

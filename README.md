@@ -1,35 +1,30 @@
 # Pixel-Lab
 
-A lightweight project space for creative tools and experiments.
+A project space for creative tools and experiments.
 
-## PixelForge — Windows Desktop Image Editor
+## PixelForge 2.0 — Windows Desktop Image Editor
 
-**PixelForge** is an offline-first Windows desktop image editor built with C# and WPF.
+PixelForge 2.0 is a lightweight offline image editor built with C# and WPF.
 
-- [Open the PixelForge project](PixelForge/)
-- [Read the setup and feature guide](PixelForge/README.md)
+### Download the app (no source code or terminal needed)
 
-### Get the Windows EXE — no terminal required
+Open the PixelForge v2.0.0 Release and download PixelForge.exe. Double-click it to launch. A ZIP download is also provided as an alternative.
 
-1. Open the repository's [Actions](../../actions) tab.
-2. Select **Build PixelForge (Windows)**.
-3. Open the latest successful run.
-4. Download the **PixelForge-Windows-x64** artifact and extract the ZIP.
-5. Double-click **PixelForge.exe**.
+### Editing features in v2.0
 
-The build workflow runs automatically when PixelForge source files change on `main`. The EXE is self-contained for 64-bit Windows and does not require users to install .NET.
+- Brush and transparent eraser with adjustable size and color
+- Text tool with independent text layers
+- Crop selection that applies across layers
+- Brightness, contrast and saturation adjustments
+- Undo and redo
+- Editable PFX projects: save and reopen
+- Layer visibility, ordering and deletion
+- Drag-and-drop import and PNG/JPEG/BMP/TIFF support
+- Full-resolution export, zoom and fit
+- Custom accent color, brush color, brush size and text size
 
-### Current features
+### Build from source
 
-- Import PNG, JPEG, BMP and TIFF images, including drag-and-drop
-- Multiple image layers with live visibility
-- Reorder and remove layers
-- Zoom and fit canvas
-- Export composited images to PNG, JPEG or BMP at original document dimensions
-- Custom logo and Windows app icon
-- Keyboard shortcuts
-- No third-party NuGet packages
+Open PixelForge in Visual Studio with the .NET 10 desktop workload. See the PixelForge project guide for details.
 
-Brush, eraser, crop, text, selections, adjustments, project save/load, undo/redo and PSD support remain on the roadmap.
-
-> PixelForge is an early-stage editor. The Windows workflow builds the app, but it should still be tested on a real Windows PC before treating it as a stable release.
+PixelForge runs locally. Images and project files are not uploaded to an online service by the application.

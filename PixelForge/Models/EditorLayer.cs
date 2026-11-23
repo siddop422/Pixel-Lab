@@ -8,24 +8,30 @@ public sealed class EditorLayer : INotifyPropertyChanged
 {
     private bool _isVisible = true;
     private string _name;
+    private BitmapSource _image;
 
     public EditorLayer(string name, BitmapSource image)
     {
         _name = name;
-        Image = image;
+        _image = image;
     }
 
     public string Name
     {
         get => _name;
-        set { _name = value; OnPropertyChanged(); }
+        set { if (_name == value) return; _name = value; OnPropertyChanged(); }
     }
 
-    public BitmapSource Image { get; }
+    public BitmapSource Image
+    {
+        get => _image;
+        set { if (ReferenceEquals(_image, value)) return; _image = value; OnPropertyChanged(); }
+    }
+
     public bool IsVisible
     {
         get => _isVisible;
-        set { _isVisible = value; OnPropertyChanged(); }
+        set { if (_isVisible == value) return; _isVisible = value; OnPropertyChanged(); }
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

@@ -1,13 +1,13 @@
 <Window x:Class="PixelForge.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="PixelForge" Icon="Assets/PixelForge.ico"
-        Height="820" Width="1360" MinHeight="620" MinWidth="980"
+        Title="PixelForge 2" Icon="Assets/PixelForge.ico"
+        Height="900" Width="1480" MinHeight="650" MinWidth="1080"
         WindowStartupLocation="CenterScreen" Background="{StaticResource WindowBg}"
-        PreviewKeyDown="Window_PreviewKeyDown">
+        PreviewKeyDown="Window_PreviewKeyDown" Closing="Window_Closing">
     <DockPanel LastChildFill="True">
         <Border DockPanel.Dock="Top" Background="#20232B" BorderBrush="#343945"
-                BorderThickness="0,0,0,1" Padding="12,8">
+                BorderThickness="0,0,0,1" Padding="10,7">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="220"/>
@@ -15,22 +15,27 @@
                     <ColumnDefinition Width="220"/>
                 </Grid.ColumnDefinitions>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <Image Source="Assets/PixelForge-Logo.png" Width="34" Height="34"
+                    <Image Source="Assets/PixelForge-Logo.png" Width="36" Height="36"
                            Stretch="Uniform" Margin="0,0,10,0"/>
                     <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="PixelForge" FontSize="16" FontWeight="Bold"/>
-                        <TextBlock Text="DESKTOP STUDIO" FontSize="9"
+                        <TextBlock Text="PixelForge" FontSize="17" FontWeight="Bold"/>
+                        <TextBlock Text="VERSION 2.0 · DESKTOP STUDIO" FontSize="9"
                                    Foreground="{StaticResource TextMuted}"/>
                     </StackPanel>
                 </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal"
-                            HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <Button Content="＋  Open images" Click="Open_Click"
+                <WrapPanel Grid.Column="1" HorizontalAlignment="Center"
+                           VerticalAlignment="Center">
+                    <Button Content="Open images" Click="Open_Click"
+                            x:Name="OpenImagesButton"
                             Background="#5147A5" BorderBrush="#7165D8"/>
+                    <Button Content="Open project" Click="OpenProject_Click"/>
+                    <Button Content="Save project" Click="SaveProject_Click"/>
+                    <Button Content="Undo" Click="Undo_Click" x:Name="UndoButton" IsEnabled="False"/>
+                    <Button Content="Redo" Click="Redo_Click" x:Name="RedoButton" IsEnabled="False"/>
                     <Button Content="Export" Click="Export_Click"/>
-                    <Button Content="Fit canvas" Click="Fit_Click"/>
-                </StackPanel>
-                <TextBlock Grid.Column="2" Text="OFFLINE WORKSPACE"
+                    <Button Content="Fit" Click="Fit_Click"/>
+                </WrapPanel>
+                <TextBlock Grid.Column="2" Text="LOCAL · OFFLINE"
                            Foreground="{StaticResource TextMuted}" FontSize="10"
                            HorizontalAlignment="Right" VerticalAlignment="Center"/>
             </Grid>
@@ -43,7 +48,8 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock x:Name="StatusText" Text="Ready · Open or drop images to begin"
+                <TextBlock x:Name="StatusText"
+                           Text="Ready · Open or drop images to begin"
                            FontSize="11" Foreground="{StaticResource TextMuted}"/>
                 <TextBlock x:Name="ZoomText" Grid.Column="1" Text="100%"
                            FontSize="11" Foreground="{StaticResource TextMuted}"/>
@@ -52,75 +58,72 @@
 
         <Grid>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="66"/>
+                <ColumnDefinition Width="82"/>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="270"/>
+                <ColumnDefinition Width="292"/>
             </Grid.ColumnDefinitions>
 
             <Border Grid.Column="0" Background="#20232B"
                     BorderBrush="#343945" BorderThickness="0,0,1,0">
-                <StackPanel Margin="7,12">
-                    <Button Content="↖" ToolTip="Move tool — planned"
-                            FontSize="20" Padding="5" Height="42" IsEnabled="False"/>
-                    <Button Content="▣" ToolTip="Selection tool — planned"
-                            FontSize="19" Padding="5" Height="42" IsEnabled="False"/>
-                    <Button Content="✎" ToolTip="Brush tool — planned"
-                            FontSize="19" Padding="5" Height="42" IsEnabled="False"/>
-                    <Button Content="◩" ToolTip="Eraser tool — planned"
-                            FontSize="19" Padding="5" Height="42" IsEnabled="False"/>
-                    <Button Content="T" ToolTip="Text tool — planned"
-                            FontSize="18" Padding="5" Height="42" IsEnabled="False"/>
-                    <Button Content="⌗" ToolTip="Crop tool — planned"
-                            FontSize="19" Padding="5" Height="42" IsEnabled="False"/>
-                    <Border Height="1" Background="#3A3F4B" Margin="5,12"/>
-                    <Button Content="＋" Click="ZoomIn_Click" ToolTip="Zoom in"
-                            FontSize="19" Padding="5" Height="42"/>
-                    <Button Content="－" Click="ZoomOut_Click" ToolTip="Zoom out"
-                            FontSize="19" Padding="5" Height="42"/>
+                <StackPanel Margin="6,12">
+                    <Button x:Name="BrushToolButton" Content="Brush" Click="BrushTool_Click"
+                            ToolTip="Paint on the selected layer (B)" Height="42" Padding="3"/>
+                    <Button x:Name="EraserToolButton" Content="Eraser" Click="EraserTool_Click"
+                            ToolTip="Erase pixels from the selected layer (E)" Height="42" Padding="3"/>
+                    <Button x:Name="TextToolButton" Content="Text" Click="TextTool_Click"
+                            ToolTip="Add a text layer (T)" Height="42" Padding="3"/>
+                    <Button x:Name="CropToolButton" Content="Crop" Click="CropTool_Click"
+                            ToolTip="Drag a crop region, then Apply crop (C)" Height="42" Padding="3"/>
+                    <Border Height="1" Background="#3A3F4B" Margin="5,10"/>
+                    <Button Content="Zoom +" Click="ZoomIn_Click" ToolTip="Zoom in"
+                            Height="38" Padding="3"/>
+                    <Button Content="Zoom -" Click="ZoomOut_Click" ToolTip="Zoom out"
+                            Height="38" Padding="3"/>
+                    <Button Content="Fit view" Click="Fit_Click" Height="38" Padding="3"/>
                 </StackPanel>
             </Border>
 
-            <Border Grid.Column="1" Background="#111318" Padding="22">
+            <Border Grid.Column="1" Background="#101217" Padding="16">
                 <Grid>
                     <ScrollViewer x:Name="CanvasScroll"
                                   HorizontalScrollBarVisibility="Auto"
                                   VerticalScrollBarVisibility="Auto"
-                                  AllowDrop="True"
-                                  DragOver="Document_DragOver"
+                                  AllowDrop="True" DragOver="Document_DragOver"
                                   Drop="Document_Drop">
                         <Grid x:Name="CanvasHost"
-                              HorizontalAlignment="Center"
-                              VerticalAlignment="Center">
+                              HorizontalAlignment="Center" VerticalAlignment="Center">
                             <Border Background="#252932" BorderBrush="#414754"
                                     BorderThickness="1">
-                                <Canvas x:Name="DocumentCanvas"
-                                        Background="#252932"
-                                        ClipToBounds="True"/>
+                                <Canvas x:Name="DocumentCanvas" Background="#252932"
+                                        ClipToBounds="True"
+                                        MouseLeftButtonDown="DocumentCanvas_MouseLeftButtonDown"
+                                        MouseMove="DocumentCanvas_MouseMove"
+                                        MouseLeftButtonUp="DocumentCanvas_MouseLeftButtonUp"/>
                             </Border>
                         </Grid>
                     </ScrollViewer>
 
                     <Border x:Name="WelcomePanel" Background="#17191F"
-                            CornerRadius="12" Padding="36"
-                            HorizontalAlignment="Center"
-                            VerticalAlignment="Center" MaxWidth="480">
+                            CornerRadius="12" Padding="34"
+                            HorizontalAlignment="Center" VerticalAlignment="Center"
+                            MaxWidth="470">
                         <StackPanel HorizontalAlignment="Center">
-                            <Image Source="Assets/PixelForge-Logo.png"
-                                   Width="92" Height="92" Stretch="Uniform"
-                                   Margin="0,0,0,18"/>
-                            <TextBlock Text="Your creative workspace"
-                                       FontSize="23" FontWeight="SemiBold"
+                            <Image Source="Assets/PixelForge-Logo.png" Width="96" Height="96"
+                                   Stretch="Uniform" Margin="0,0,0,16"/>
+                            <TextBlock Text="Create something great"
+                                       FontSize="24" FontWeight="SemiBold"
                                        HorizontalAlignment="Center"/>
-                            <TextBlock Text="Open an image or drag files into this area. Your files stay on this PC."
+                            <TextBlock Text="Open an image, drop it here, or create a new project. Your work stays on this PC."
                                        TextWrapping="Wrap" TextAlignment="Center"
                                        Foreground="{StaticResource TextMuted}"
                                        Margin="0,10,0,20" FontSize="13"/>
-                            <Button Content="＋  Open images" Click="Open_Click"
+                            <Button Content="Open images" Click="Open_Click"
+                                    x:Name="WelcomeOpenButton"
                                     Background="#5147A5" BorderBrush="#7165D8"
                                     HorizontalAlignment="Center" Padding="20,10"/>
-                            <TextBlock Text="PNG  ·  JPEG  ·  BMP  ·  TIFF"
+                            <TextBlock Text="PNG · JPEG · BMP · TIFF · PFX PROJECTS"
                                        FontSize="10" Foreground="{StaticResource TextMuted}"
-                                       HorizontalAlignment="Center" Margin="0,17,0,0"/>
+                                       HorizontalAlignment="Center" Margin="0,16,0,0"/>
                         </StackPanel>
                     </Border>
                 </Grid>
@@ -129,21 +132,21 @@
             <Border Grid.Column="2" Background="#20232B"
                     BorderBrush="#343945" BorderThickness="1,0,0,0">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="14">
+                    <StackPanel Margin="13">
                         <TextBlock Text="LAYERS" FontSize="11" FontWeight="Bold"
-                                   Foreground="{StaticResource TextMuted}"
-                                   Margin="2,5,0,12"/>
-                        <DockPanel Margin="0,0,0,9">
+                                   Foreground="{StaticResource TextMuted}" Margin="2,4,0,10"/>
+                        <DockPanel Margin="0,0,0,8">
                             <TextBlock Text="Document layers" FontSize="13"
                                        FontWeight="SemiBold" VerticalAlignment="Center"/>
                             <Button DockPanel.Dock="Right" Content="＋" Padding="8,4"
-                                    Click="Open_Click" ToolTip="Import another image layer"/>
+                                    Click="Open_Click" ToolTip="Import image as a layer"/>
                         </DockPanel>
                         <ListBox x:Name="LayersList" ItemsSource="{Binding Layers}"
                                  SelectedItem="{Binding SelectedLayer, Mode=TwoWay}"
                                  Background="Transparent" BorderThickness="0"
                                  Foreground="{StaticResource TextMain}"
-                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 MinHeight="90" MaxHeight="220">
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
                                     <Border Background="#292D37" CornerRadius="6"
@@ -151,10 +154,9 @@
                                         <DockPanel>
                                             <CheckBox IsChecked="{Binding IsVisible, Mode=TwoWay}"
                                                       VerticalAlignment="Center"
-                                                      Margin="0,0,8,0"
-                                                      ToolTip="Show or hide layer"/>
+                                                      Margin="0,0,7,0" ToolTip="Toggle visibility"/>
                                             <TextBlock Text="▧" Foreground="#A99FFF"
-                                                       FontSize="17" Margin="0,0,8,0"
+                                                       FontSize="17" Margin="0,0,7,0"
                                                        VerticalAlignment="Center"/>
                                             <TextBlock Text="{Binding Name}"
                                                        VerticalAlignment="Center"
@@ -164,38 +166,68 @@
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
-
-                        <UniformGrid Columns="3" Margin="-3,8,-3,0">
-                            <Button Content="↑" Click="MoveUp_Click" ToolTip="Move layer up"/>
-                            <Button Content="↓" Click="MoveDown_Click" ToolTip="Move layer down"/>
-                            <Button Content="✕" Click="DeleteSelected_Click" ToolTip="Remove selected layer"/>
+                        <UniformGrid Columns="3" Margin="-3,7,-3,0">
+                            <Button Content="Up" Click="MoveUp_Click"/>
+                            <Button Content="Down" Click="MoveDown_Click"/>
+                            <Button Content="Delete" Click="DeleteSelected_Click"/>
                         </UniformGrid>
 
-                        <Border Height="1" Background="#3A3F4B" Margin="0,18,0,16"/>
-                        <TextBlock Text="PROPERTIES" FontSize="11" FontWeight="Bold"
-                                   Foreground="{StaticResource TextMuted}"
-                                   Margin="2,0,0,12"/>
-                        <TextBlock Text="Selected layer" FontSize="12"
+                        <Border Height="1" Background="#3A3F4B" Margin="0,15,0,13"/>
+                        <TextBlock Text="BRUSH & TEXT" FontSize="11" FontWeight="Bold"
+                                   Foreground="{StaticResource TextMuted}" Margin="2,0,0,9"/>
+                        <DockPanel Margin="0,0,0,5">
+                            <TextBlock Text="Color (hex)" FontSize="11"
+                                       Foreground="{StaticResource TextMuted}"/>
+                            <TextBox x:Name="BrushColorBox" Text="#8B7CFF"
+                                     Width="88" HorizontalContentAlignment="Center"
+                                     DockPanel.Dock="Right" Padding="4"/>
+                        </DockPanel>
+                        <TextBlock Text="Brush size" FontSize="11"
                                    Foreground="{StaticResource TextMuted}"/>
-                        <TextBlock x:Name="SelectedLayerText" Text="No layer selected"
-                                   FontSize="13" Margin="0,5,0,14"
-                                   TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Text="Canvas size" FontSize="12"
+                        <Slider x:Name="BrushSizeSlider" Minimum="1" Maximum="120"
+                                Value="18" Margin="0,1,0,5"/>
+                        <TextBlock Text="Text size" FontSize="11"
                                    Foreground="{StaticResource TextMuted}"/>
-                        <TextBlock x:Name="CanvasSizeText" Text="—"
-                                   FontSize="13" Margin="0,5,0,14"/>
-                        <TextBlock Text="Layer visibility" FontSize="12"
-                                   Foreground="{StaticResource TextMuted}"/>
-                        <TextBlock Text="Visibility updates immediately. The top layer in this list is drawn above the others."
-                                   TextWrapping="Wrap" FontSize="11"
-                                   Foreground="{StaticResource TextMuted}" Margin="0,5,0,0"/>
+                        <Slider x:Name="TextSizeSlider" Minimum="10" Maximum="160"
+                                Value="44" Margin="0,1,0,7"/>
+                        <Button Content="Apply crop selection" Click="ApplyCrop_Click"
+                                x:Name="ApplyCropButton" IsEnabled="False"
+                                Background="#5147A5" BorderBrush="#7165D8"/>
 
-                        <Border Height="1" Background="#3A3F4B" Margin="0,18,0,16"/>
+                        <Border Height="1" Background="#3A3F4B" Margin="0,14,0,13"/>
+                        <TextBlock Text="IMAGE ADJUSTMENTS" FontSize="11" FontWeight="Bold"
+                                   Foreground="{StaticResource TextMuted}" Margin="2,0,0,8"/>
+                        <TextBlock Text="Brightness" FontSize="11" Foreground="{StaticResource TextMuted}"/>
+                        <Slider x:Name="BrightnessSlider" Minimum="-100" Maximum="100"
+                                Value="0" Margin="0,0,0,5"/>
+                        <TextBlock Text="Contrast" FontSize="11" Foreground="{StaticResource TextMuted}"/>
+                        <Slider x:Name="ContrastSlider" Minimum="-100" Maximum="100"
+                                Value="0" Margin="0,0,0,5"/>
+                        <TextBlock Text="Saturation" FontSize="11" Foreground="{StaticResource TextMuted}"/>
+                        <Slider x:Name="SaturationSlider" Minimum="0" Maximum="200"
+                                Value="100" Margin="0,0,0,6"/>
+                        <UniformGrid Columns="2">
+                            <Button Content="Apply" Click="ApplyAdjustments_Click"/>
+                            <Button Content="Reset" Click="ResetAdjustments_Click"/>
+                        </UniformGrid>
+
+                        <Border Height="1" Background="#3A3F4B" Margin="0,14,0,13"/>
+                        <TextBlock Text="APPEARANCE" FontSize="11" FontWeight="Bold"
+                                   Foreground="{StaticResource TextMuted}" Margin="2,0,0,8"/>
+                        <DockPanel Margin="0,0,0,5">
+                            <TextBlock Text="Accent color" FontSize="11"
+                                       Foreground="{StaticResource TextMuted}"/>
+                            <TextBox x:Name="AccentColorBox" Text="#8B7CFF"
+                                     Width="88" HorizontalContentAlignment="Center"
+                                     DockPanel.Dock="Right" Padding="4"/>
+                        </DockPanel>
+                        <Button Content="Apply accent" Click="ApplyAccent_Click"/>
+
+                        <Border Height="1" Background="#3A3F4B" Margin="0,14,0,12"/>
                         <TextBlock Text="SHORTCUTS" FontSize="11" FontWeight="Bold"
-                                   Foreground="{StaticResource TextMuted}"
-                                   Margin="2,0,0,8"/>
-                        <TextBlock Text="Ctrl + O   Open images&#10;Ctrl + E   Export image&#10;Delete      Remove layer&#10;Ctrl + ↑ / ↓   Reorder layer"
-                                   TextWrapping="Wrap" FontSize="11"
+                                   Foreground="{StaticResource TextMuted}" Margin="2,0,0,7"/>
+                        <TextBlock Text="Ctrl+O Open images&#10;Ctrl+Shift+O Open project&#10;Ctrl+S Save project&#10;Ctrl+E Export&#10;Ctrl+Z / Ctrl+Y Undo / redo&#10;B / E / T / C Tools&#10;Delete Remove layer"
+                                   TextWrapping="Wrap" FontSize="10.5"
                                    Foreground="{StaticResource TextMuted}"/>
                     </StackPanel>
                 </ScrollViewer>
