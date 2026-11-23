@@ -6,15 +6,16 @@ A lightweight Windows Game Boy and Game Boy Color emulator with a polished deskt
 
 Open the [PocketGB Releases](https://github.com/siddop422/Pixel-Lab/releases) page and download:
 
-- **PocketGB-Setup-1.0.0.exe** — normal Windows installer; adds Start Menu and optional desktop shortcuts.
-- **PocketGB-Portable-1.0.0.zip** — extract and run without installing.
+- **PocketGB-Setup-1.0.1.exe** — normal Windows installer; adds Start Menu and optional desktop shortcuts.
+- **PocketGB-Portable-1.0.1.zip** — extract and run without installing.
 
 The Windows build is self-contained. You do not need to install .NET separately. The current build also applies the compatibility fix for ImGui.NET 1.91.
 
 ## Features
 
 - Original Game Boy (DMG) and Game Boy Color (CGB) emulation.
-- ROM browser for .gb, .gbc, and .sgb files, plus drag-and-drop and a recent-games list.
+- ROM browser for .gb, .gbc, and .sgb files, plus ZIP archives containing those formats.
+- Drag-and-drop for individual ROMs and ZIP archives, plus a recent-games list.
 - Ten save-state slots per game, with thumbnails and timestamps.
 - Quick save (F5) and quick load (F8); number keys 0–9 select the active slot.
 - Automatic battery-backed cartridge saves (.sav), including MBC3 RTC data.
@@ -50,7 +51,7 @@ Save states capture the whole emulator at that moment and are stored as <game>.s
 
 ## Supported files
 
-Open your own legally obtained Game Boy ROM files (.gb, .gbc, or .sgb). **No commercial games, BIOS files, or copyrighted ROMs are included.**
+Open your own legally obtained Game Boy ROM files (.gb, .gbc, or .sgb), directly or inside a .zip archive. For ZIPs containing several supported ROMs, PocketGB opens the first one in a stable alphabetical order. **No commercial games, BIOS files, or copyrighted ROMs are included.**
 
 ## Requirements
 
@@ -69,11 +70,11 @@ Run these commands in PowerShell:
     git clone --recurse-submodules --branch pocketgb-emulator https://github.com/siddop422/Pixel-Lab.git PocketGB
     cd PocketGB
     .scriptsPrepare.ps1
-    dotnet publish .endorGameboySharpGameboySharp.csproj -c Release -r win-x64 --self-contained true -p:AssemblyName=PocketGB -p:Version=1.0.0 -o publish
+    dotnet publish .endorGameboySharpGameboySharp.csproj -c Release -r win-x64 --self-contained true -p:AssemblyName=PocketGB -p:Version=1.0.1 -o publish
 
 To build the setup wizard, install Inno Setup 6 and run:
 
-    iscc /DPublishDir="publish" /DAppVersion="1.0.0" .installPocketGB.iss
+    iscc /DPublishDir="publish" /DAppVersion="1.0.1" .installPocketGB.iss
 
 ## Credits and license
 

@@ -30,7 +30,7 @@ jobs:
       - name: Publish self-contained Windows x64 app
         shell: pwsh
         run: |
-          dotnet publish .\vendor\GameboySharp\GameboySharp.csproj --configuration Release --runtime win-x64 --self-contained true -p:AssemblyName=PocketGB -p:Version=1.0.0 -p:DebugType=none -p:DebugSymbols=false --output .\publish
+          dotnet publish .\vendor\GameboySharp\GameboySharp.csproj --configuration Release --runtime win-x64 --self-contained true -p:AssemblyName=PocketGB -p:Version=1.0.1 -p:DebugType=none -p:DebugSymbols=false --output .\publish
           if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed" }
 
       - name: Install Inno Setup
@@ -41,20 +41,20 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force .\dist | Out-Null
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion="1.0.0" /DPublishDir="..\publish" .\install\PocketGB.iss
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion="1.0.1" /DPublishDir="..\publish" .\install\PocketGB.iss
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed" }
 
       - name: Create portable archive
         shell: pwsh
-        run: Compress-Archive -Path .\publish\* -DestinationPath .\dist\PocketGB-Portable-1.0.0.zip -CompressionLevel Optimal
+        run: Compress-Archive -Path .\publish\* -DestinationPath .\dist\PocketGB-Portable-1.0.1.zip -CompressionLevel Optimal
 
       - name: Upload build files
         uses: actions/upload-artifact@v4
         with:
           name: PocketGB-Windows-x64
           path: |
-            dist/PocketGB-Setup-1.0.0.exe
-            dist/PocketGB-Portable-1.0.0.zip
+            dist/PocketGB-Setup-1.0.1.exe
+            dist/PocketGB-Portable-1.0.1.zip
           if-no-files-found: error
 
   release:
@@ -70,9 +70,9 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: pocketgb-v1.0.0
+          tag_name: pocketgb-v1.0.1
           target_commitish: pocketgb-emulator
-          name: PocketGB v1.0.0
+          name: PocketGB v1.0.1
           body: |
             First PocketGB Windows release.
 
@@ -81,10 +81,12 @@ jobs:
             - Game Boy and Game Boy Color support
             - 10 save-state slots per game
             - Automatic battery-backed saves
+            - ZIP archive ROM detection and extraction
+            - Responsive two-row toolbar and dialogs
 
             Bring your own legally obtained ROM files.
           draft: false
           prerelease: false
           files: |
-            dist/PocketGB-Setup-1.0.0.exe
-            dist/PocketGB-Portable-1.0.0.zip
+            dist/PocketGB-Setup-1.0.1.exe
+            dist/PocketGB-Portable-1.0.1.zip
