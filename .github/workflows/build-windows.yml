@@ -1,20 +1,37 @@
-name: Build PixelForge Windows + Release
+name: PixelForge Windows CI and Release
 
 on:
   push:
     branches: [main]
     paths:
       - 'PixelForge/**'
+      - 'PixelForge.SmokeTests/**'
       - '.github/workflows/build-windows.yml'
+      - 'README.md'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'PixelForge/**'
+      - 'PixelForge.SmokeTests/**'
+      - '.github/workflows/build-windows.yml'
+      - 'README.md'
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: Publish the v2.1.0 GitHub release after every check succeeds
+        required: true
+        type: boolean
+        default: false
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
-    name: Build, package and release PixelForge
+    name: Build, smoke-test and package Windows x64
     runs-on: windows-latest
+    permissions:
+      contents: write
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -24,10 +41,21 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Restore
-        run: dotnet restore PixelForge/PixelForge.csproj
+      - name: Restore projects
+        run: |
+          dotnet restore PixelForge/PixelForge.csproj
+          dotnet restore PixelForge.SmokeTests/PixelForge.SmokeTests.csproj
 
-      - name: Publish self-contained EXE
+      - name: Build Debug
+        run: dotnet build PixelForge/PixelForge.csproj --configuration Debug --no-restore
+
+      - name: Build Release
+        run: dotnet build PixelForge/PixelForge.csproj --configuration Release --no-restore
+
+      - name: Run package-free functional smoke tests
+        run: dotnet run --project PixelForge.SmokeTests/PixelForge.SmokeTests.csproj --configuration Release --no-restore
+
+      - name: Publish self-contained single-file EXE
         run: >-
           dotnet publish PixelForge/PixelForge.csproj
           --configuration Release
@@ -38,40 +66,95 @@ jobs:
           -p:PublishTrimmed=false
           --output PixelForge/publish
 
-      - name: Package EXE
+      - name: Package and verify distribution
         shell: pwsh
         run: |
-          Compress-Archive -Path PixelForge/publish/PixelForge.exe -DestinationPath PixelForge-Windows-x64.zip -Force
+          $ErrorActionPreference = 'Stop'
+          $exe = (Resolve-Path 'PixelForge/publish/PixelForge.exe').Path
+          $zip = Join-Path $PWD 'PixelForge-Windows-x64.zip'
+          $shaFile = Join-Path $PWD 'PixelForge-Windows-x64.sha256'
+          Remove-Item $zip -Force -ErrorAction SilentlyContinue
 
-      - name: Upload Actions artifact
+          $sevenZip = (Get-Command '7z.exe' -ErrorAction SilentlyContinue).Source
+          if (-not $sevenZip -and (Test-Path "$env:ProgramFiles/7-Zip/7z.exe")) {
+            $sevenZip = "$env:ProgramFiles/7-Zip/7z.exe"
+          }
+
+          if ($sevenZip) {
+            & $sevenZip a -tzip -mx=9 -ep1 $zip $exe | Out-Host
+            if ($LASTEXITCODE -ne 0) { throw '7-Zip packaging failed.' }
+          }
+          else {
+            Compress-Archive -Path $exe -DestinationPath $zip -CompressionLevel Optimal -Force
+          }
+
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [System.IO.Compression.ZipFile]::OpenRead($zip)
+          try {
+            if ($archive.Entries.Count -ne 1) { throw 'The distribution ZIP must contain exactly one EXE.' }
+            $entry = $archive.Entries[0]
+            if ($entry.FullName -ne 'PixelForge.exe') { throw 'The ZIP does not contain PixelForge.exe at its root.' }
+            $verifyPath = Join-Path $env:RUNNER_TEMP 'PixelForge-zip-verify.exe'
+            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $verifyPath, $true)
+            $sourceHash = (Get-FileHash $exe -Algorithm SHA256).Hash
+            $zipHash = (Get-FileHash $verifyPath -Algorithm SHA256).Hash
+            if ($sourceHash -ne $zipHash) { throw 'The extracted EXE does not match the published EXE.' }
+            Remove-Item $verifyPath -Force
+          }
+          finally { $archive.Dispose() }
+
+          $exeInfo = Get-Item $exe
+          $zipInfo = Get-Item $zip
+          $ratio = [math]::Round(($zipInfo.Length / $exeInfo.Length) * 100, 2)
+          $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  PixelForge.exe" | Set-Content -Path $shaFile -Encoding ascii
+          @(
+            '### PixelForge Windows package'
+            "- EXE: $([math]::Round($exeInfo.Length / 1MB, 2)) MiB"
+            "- ZIP: $([math]::Round($zipInfo.Length / 1MB, 2)) MiB"
+            "- ZIP / EXE: $ratio%"
+            "- SHA-256: $hash"
+            '- ZIP extraction and byte-for-byte SHA-256 verification: passed'
+          ) | Add-Content $env:GITHUB_STEP_SUMMARY
+
+      - name: Upload release-ready files as Actions artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PixelForge-Windows-x64
-          path: PixelForge-Windows-x64.zip
+          name: PixelForge-2.1.0-Windows-x64
+          path: |
+            PixelForge/publish/PixelForge.exe
+            PixelForge-Windows-x64.zip
+            PixelForge-Windows-x64.sha256
           if-no-files-found: error
           retention-days: 30
 
-      - name: Create PixelForge v2 GitHub Release
+      - name: Publish PixelForge 2.1.0 GitHub Release
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.publish_release == true) || (github.event_name == 'push' && startsWith(github.event.head_commit.message, 'release: PixelForge 2.1.0')) }}
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v2.0.0
+          tag_name: v2.1.0
           target_commitish: ${{ github.sha }}
-          name: PixelForge v2.0.0
+          name: PixelForge 2.1.0 — Performance & Editing Upgrade
           body: |
-            ## PixelForge 2.0 — Windows Desktop Edition
+            ## PixelForge 2.1.0 — Windows Desktop
 
-            This release adds the first complete editing workflow:
-            - Brush and transparent eraser with adjustable size and color
-            - Text layers and crop tool
-            - Brightness, contrast and saturation adjustments
-            - Undo/redo and editable PFX projects
-            - Layer controls, drag-and-drop and full-resolution export
-            - Customizable accent color and persistent editor settings
+            ### Improvements
+            - Lower-allocation brush strokes with reusable dirty-region buffers
+            - Zero-copy undo snapshots for completed paint strokes
+            - Versioned PFX project format with v2.0 project compatibility
+            - Atomic project saving and bounded archive/image validation
+            - Rename and duplicate layer controls
+            - Package-free Windows smoke tests in the release pipeline
 
-            For users: download PixelForge.exe below and double-click it. No terminal or separate .NET install is required. The ZIP is provided as an alternative.
+            ### Download
+            Download PixelForge.exe for a direct single-file launch, or PixelForge-Windows-x64.zip for the ZIP package. No separate .NET installation is required.
+
+            ### Notes
+            The app remains offline-first and unsigned. Automated Windows build and smoke tests run in GitHub Actions; no claim of manual GUI testing is made.
           files: |
             PixelForge/publish/PixelForge.exe
             PixelForge-Windows-x64.zip
+            PixelForge-Windows-x64.sha256
           fail_on_unmatched_files: true
           make_latest: true
         env:

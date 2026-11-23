@@ -2,32 +2,25 @@
 
 A project space for creative tools and experiments.
 
-## PixelForge 2.0 — Windows Desktop Image Editor
+## PixelForge 2.1.0 — Windows Desktop Image Editor
 
-PixelForge 2.0 is a lightweight offline image editor built with C# and WPF.
+PixelForge 2.1 is an offline-first Windows image editor built with C# and WPF.
 
 ### Download the app (no source code or terminal needed)
 
-Open the PixelForge v2.0.0 Release and download PixelForge.exe. Double-click it to launch. A ZIP download is also provided as an alternative.
+Open the [PixelForge 2.1.0 Release](https://github.com/siddop422/Pixel-Lab/releases/tag/v2.1.0) and download PixelForge.exe. Double-click it to launch. The optimized ZIP is also available.
 
-### Editing features in v2.0
+### Highlights
 
-- Brush and transparent eraser with adjustable size and color
-- Text tool with independent text layers
-- Crop selection that applies across layers
+- Multiple image layers with visibility, reorder, rename, duplicate and delete controls
+- Brush and transparent eraser with reduced per-stroke allocations
+- Text layers and crop across all layers
 - Brightness, contrast and saturation adjustments
 - Undo and redo
-- Editable PFX projects: save and reopen
-- Layer visibility, ordering and deletion
-- Drag-and-drop import and PNG/JPEG/BMP/TIFF support
-- Full-resolution export, zoom and fit
-- Custom accent color, brush color, brush size and text size
-
-### Build from source
-
-Open PixelForge in Visual Studio with the .NET 10 desktop workload. See the PixelForge project guide for details.
+- Versioned .pfx project files with v2.0 compatibility and safer atomic saving
+- PNG/JPEG/BMP/TIFF import and PNG/JPEG/BMP export
+- Self-contained Windows x64 single-file executable
 
 PixelForge runs locally. Images and project files are not uploaded to an online service by the application.
 
-
-Latest source updates are published from main. The Windows EXE and ZIP are attached to the v2.0.0 GitHub Release after its build passes.
+See PixelForge/README.md for the full feature list, shortcuts, build requirements and known limitations.

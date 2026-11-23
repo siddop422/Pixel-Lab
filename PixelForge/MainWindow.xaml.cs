@@ -34,6 +34,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private EditorLayer? _strokeLayer;
     private WriteableBitmap? _paintBitmap;
     private byte[]? _paintPixels;
+    private byte[] _paintRegionBuffer = Array.Empty<byte>();
     private BitmapSource? _strokeBefore;
     private Point _lastPaintPoint;
     private Color _strokeColor;
@@ -286,9 +287,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         SelectedLayer = _strokeLayer;
         LayersList.SelectedItem = _strokeLayer;
 
-        _strokeBefore = ImageProcessingService.Clone(_strokeLayer.Image);
-        _paintBitmap = ImageProcessingService.ToWriteable(_strokeLayer.Image);
-        _paintPixels = ImageProcessingService.GetBgraPixels(_strokeLayer.Image, out _);
+        // Retain the prior immutable image for undo and convert to BGRA only once.
+        _strokeBefore = _strokeLayer.Image;
+        _paintPixels = ImageProcessingService.GetBgraPixels(_strokeBefore, out _);
+        _paintBitmap = ImageProcessingService.ToWriteable(_strokeBefore, _paintPixels);
         _strokeLayer.Image = _paintBitmap;
         _strokeColor = ReadBrushColor();
         _strokeRadius = Math.Max(0.75, BrushSizeSlider.Value / 2.0);
@@ -332,9 +334,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private void PaintAt(Point point)
     {
         if (_paintBitmap is null || _paintPixels is null) return;
-        ImageProcessingService.PaintCircle(
+        _paintRegionBuffer = ImageProcessingService.PaintCircle(
             _paintBitmap, _paintPixels, point.X, point.Y,
-            _strokeRadius, _strokeColor, _activeTool == EditingTool.Eraser);
+            _strokeRadius, _strokeColor, _activeTool == EditingTool.Eraser,
+            _paintRegionBuffer);
     }
 
     private void DocumentCanvas_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -348,11 +351,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 PushHistory(
                     _activeTool == EditingTool.Eraser ? "Erase" : "Brush",
                     new List<LayerImageState> { new(_strokeLayer, _strokeBefore) },
-                    DocumentCanvas.Width, DocumentCanvas.Height);
+                    DocumentCanvas.Width, DocumentCanvas.Height, captureAfter: false);
 
             _strokeLayer = null;
             _paintBitmap = null;
             _paintPixels = null;
+            _paintRegionBuffer = Array.Empty<byte>();
             _strokeBefore = null;
             StatusText.Text = "Stroke applied · Ctrl+Z to undo";
             return;
@@ -377,7 +381,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private void AddTextAt(Point point)
     {
-        var text = PromptForText();
+        var text = PromptForText("Add text layer", "Your text", "Add text layer");
         if (string.IsNullOrWhiteSpace(text)) return;
 
         var width = (int)DocumentCanvas.Width;
@@ -393,11 +397,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         StatusText.Text = "Text layer added · Reorder it in Layers";
     }
 
-    private string? PromptForText()
+    private string? PromptForText(string title, string initialText, string buttonText)
     {
         var dialog = new Window
         {
-            Title = "Add text layer",
+            Title = title,
             Width = 420,
             Height = 190,
             ResizeMode = ResizeMode.NoResize,
@@ -416,14 +420,14 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         var input = new TextBox
         {
-            Height = 34, FontSize = 14, Text = "Your text",
+            Height = 34, FontSize = 14, Text = initialText,
             Padding = new Thickness(6)
         };
         panel.Children.Add(input);
 
         var add = new Button
         {
-            Content = "Add text layer", Width = 130, Height = 34,
+            Content = buttonText, Width = 130, Height = 34,
             Margin = new Thickness(0, 14, 0, 0),
             HorizontalAlignment = HorizontalAlignment.Right, IsDefault = true
         };
@@ -641,13 +645,17 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             new LayerImageState(layer, ImageProcessingService.Clone(layer.Image))).ToList();
 
     private void PushHistory(string name, List<LayerImageState> before,
-        double beforeWidth, double beforeHeight, EditorLayer? addedLayer = null)
+        double beforeWidth, double beforeHeight, EditorLayer? addedLayer = null,
+        bool captureAfter = true)
     {
         if (_historyPosition < _history.Count)
             _history.RemoveRange(_historyPosition, _history.Count - _historyPosition);
 
         var affected = before.Select(x => x.Layer).ToList();
-        var after = CaptureLayerImages(affected);
+        // A completed WriteableBitmap is not mutated by later strokes; each stroke gets a new one.
+        var after = captureAfter
+            ? CaptureLayerImages(affected)
+            : affected.Select(layer => new LayerImageState(layer, layer.Image)).ToList();
         _history.Add(new HistoryEntry(name, before, after,
             beforeWidth, beforeHeight, DocumentCanvas.Width, DocumentCanvas.Height, addedLayer));
 
@@ -717,6 +725,31 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         LayersList.SelectedItem = SelectedLayer;
         LayersList.ScrollIntoView(SelectedLayer);
         StatusText.Text = $"Moved layer {SelectedLayer.Name}";
+    }
+
+    private void RenameSelected_Click(object sender, RoutedEventArgs e)
+    {
+        if (SelectedLayer is null) return;
+        var layer = SelectedLayer;
+        var entered = PromptForText("Rename layer", layer.Name, "Rename");
+        if (string.IsNullOrWhiteSpace(entered)) return;
+        var name = entered.Trim();
+        layer.Name = name[..Math.Min(name.Length, 100)];
+        StatusText.Text = $"Renamed layer to {layer.Name}";
+    }
+
+    private void DuplicateSelected_Click(object sender, RoutedEventArgs e)
+    {
+        if (SelectedLayer is null) return;
+        var source = SelectedLayer;
+        var copy = new EditorLayer($"{source.Name} copy", source.Image)
+        {
+            IsVisible = source.IsVisible
+        };
+        var index = Layers.IndexOf(source);
+        Layers.Insert(Math.Max(0, index), copy);
+        LayersList.SelectedItem = copy;
+        StatusText.Text = $"Duplicated layer: {source.Name}";
     }
 
     private void DeleteSelected_Click(object sender, RoutedEventArgs e)
