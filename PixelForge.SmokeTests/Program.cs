@@ -116,9 +116,12 @@ internal static class Program
 
             var layer = archive.CreateEntry("layers/layer_000.png");
             using var stream = layer.Open();
+            using var encodedPng = new MemoryStream();
             var encoder = new PngBitmapEncoder();
             encoder.Frames.Add(BitmapFrame.Create(image));
-            encoder.Save(stream);
+            encoder.Save(encodedPng);
+            encodedPng.Position = 0;
+            encodedPng.CopyTo(stream);
         }
 
         var loaded = ProjectService.Load(path);

@@ -98,9 +98,12 @@ public static class ProjectService
 
                         var entry = archive.CreateEntry(imagePath, CompressionLevel.Optimal);
                         using var output = entry.Open();
+                        using var encodedPng = new MemoryStream();
                         var encoder = new PngBitmapEncoder();
                         encoder.Frames.Add(BitmapFrame.Create(layer.Image));
-                        encoder.Save(output);
+                        encoder.Save(encodedPng);
+                        encodedPng.Position = 0;
+                        encodedPng.CopyTo(output);
                     }
 
                     var manifestEntry = archive.CreateEntry("manifest.json", CompressionLevel.Optimal);
