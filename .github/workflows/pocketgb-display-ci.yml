@@ -3,11 +3,10 @@ name: PocketGB Windows Build and Installer CI
 on:
   push:
     branches:
-      - pocketgb-display-settings
+      - main
   pull_request:
     branches:
-      - pocketgb-emulator
-      - pocketgb-display-settings
+      - main
 
 permissions:
   contents: write
@@ -80,11 +79,11 @@ jobs:
           retention-days: 30
 
       - name: Publish official PocketGB v1.2.0 GitHub Release
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && startsWith(github.event.head_commit.message, 'release: PocketGB v1.2.0')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: pocketgb-v1.2.0
-          target_commitish: pocketgb-display-settings
+          target_commitish: main
           name: PocketGB v1.2.0
           draft: false
           prerelease: false
