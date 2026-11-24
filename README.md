@@ -32,6 +32,11 @@ xattr -dr com.apple.quarantine PocketGB.app
 - 0.5× / 1× / 2× speed selection and hold-to-fast-forward.
 - Configurable keyboard and gamepad bindings.
 - Integer scaling, aspect-ratio lock, DMG colour palettes, scanline options, and screenshots.
+- Windowed resolution presets, fullscreen mode, and optional V-Sync.
+- GPU upscaling filters: nearest-neighbour, bilinear, and sharp-bilinear.
+- Optional LCD pixel-grid and CRT curvature/vignette shader effects, plus brightness and saturation controls.
+- Experimental previous/current-frame blending with an adjustable mix amount (a visual blending effect, not AI or motion-vector frame generation).
+- Live OpenGL renderer, GPU vendor, and driver-version diagnostics in Video settings.
 - Optional CPU, memory, VRAM and sprite debugging tools.
 - Drift-resistant frame pacing and lower overhead while the debug window is hidden.
 
