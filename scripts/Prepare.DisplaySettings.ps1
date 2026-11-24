@@ -1042,6 +1042,35 @@ public sealed class CgbStartupRegressionTests
             File.Delete(path);
         }
     }
+
+    [Fact]
+    public void CgbEchoRamReadsFollowTheSelectedWramBank()
+    {
+        Environment.SetEnvironmentVariable("GBSHARP_AUDIO", "none");
+        string path = CreateTemporaryCgbRom();
+
+        try
+        {
+            using var emulator = new Emulator();
+            emulator.LoadRom(path);
+
+            emulator.Mmu.WriteByte(0xFF70, 0x02);
+            emulator.Mmu.WriteByte(0xD123, 0x4A);
+            Assert.Equal((byte)0x4A, emulator.Mmu.ReadByte(0xF123));
+
+            emulator.Mmu.WriteByte(0xFF70, 0x03);
+            Assert.NotEqual((byte)0x4A, emulator.Mmu.ReadByte(0xF123));
+            emulator.Mmu.WriteByte(0xD123, 0x66);
+            Assert.Equal((byte)0x66, emulator.Mmu.ReadByte(0xF123));
+
+            emulator.Mmu.WriteByte(0xFF70, 0x02);
+            Assert.Equal((byte)0x4A, emulator.Mmu.ReadByte(0xF123));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 }
 '@
 $testDirectory = Split-Path -Parent $regressionTestsPath
@@ -1066,6 +1095,11 @@ $mmuSource = Replace-ExactlyOnce $mmuSource '                        byte newBan
 $mmuSource = Replace-ExactlyOnce $mmuSource '                        if (newBank == 0) newBank = 1; // Bank 0 is not accessible, use bank 1 instead' '' "SVBK bank-zero remapping"
 $mmuSource = Replace-ExactlyOnce $mmuSource '                        _wramBank = newBank;' '' "SVBK effective bank assignment removal"
 $mmuSource = Replace-ExactlyOnce $mmuSource '                        Log.Debug($"WRAM bank switched to: {_wramBank}");' '                        Log.Debug($"WRAM bank register set to: {_wramBank}; physical bank: {EffectiveWramBank}");' "SVBK bank diagnostic"
+# CGB echo RAM is a true mirror of the selected WRAM bank, not the DMG flat RAM array.
+$echoReadCount = ([regex]::Matches($mmuSource, [regex]::Escape('return _memory[mirroredAddress];'))).Count
+if ($echoReadCount -ne 2) { throw "Expected the two CGB echo-RAM read paths, found $echoReadCount." }
+$mmuSource = $mmuSource.Replace('return _memory[mirroredAddress];', 'return ReadWramByte(mirroredAddress);')
+
 [System.IO.File]::WriteAllText($mmuPath, $mmuSource, [System.Text.UTF8Encoding]::new($false))
 
 Write-Host "CGB post-boot registers, bank defaults and double-speed timer clock patched with regression tests." -ForegroundColor Green
