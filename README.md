@@ -123,6 +123,10 @@ To build the Windows installer, install Inno Setup 6 and run:
 & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion="1.2.0" /DPublishDir="..\publish" .\install\PocketGB.iss
 ```
 
+## Stability and renderer roadmap
+
+See [STABILITY-AND-RENDER-BACKENDS.md](docs/STABILITY-AND-RENDER-BACKENDS.md) for the current CGB startup/timer fixes, recommended test-ROM suites, and the staged OpenGL/Vulkan plus CPU/GPU renderer plan. Vulkan is not advertised as available until a real Vulkan renderer is implemented and validated.
+
 ## Credits and license
 
 The emulation engine is based on [sokie/gameboy_sharp](https://github.com/sokie/gameboy_sharp), licensed under the MIT License. Its copyright and license notice are preserved in `vendor/GameboySharp/LICENSE` and `THIRD-PARTY-NOTICES.md`.
