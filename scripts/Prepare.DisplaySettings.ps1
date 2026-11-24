@@ -932,3 +932,174 @@ New-Item -ItemType Directory -Force $testsDirectory | Out-Null
 [System.IO.File]::WriteAllText($testsPath, $testCode, [System.Text.UTF8Encoding]::new($false))
 
 Write-Host "PocketGB display controls, shader filters, temporal blending and GPU diagnostics prepared." -ForegroundColor Green
+
+
+# CGB startup correctness and double-speed timer regression fixes.
+# The prior implementation used the DMG-compatibility CGB register values for all CGB games,
+# and selected bank 1/7 instead of the post-boot VRAM bank 0 / WRAM bank 1.
+$cpuPath = Join-Path $vendor "Core/Cpu.cs"
+$cpuSource = [System.IO.File]::ReadAllText($cpuPath)
+$cpuSource = Replace-ExactlyOnce $cpuSource '            DE = 0x0008;  // D=0x00, E=0x08 - GBC specific  ' '            DE = 0xFF56;  // CGB boot-ROM post-boot value' "CGB DE boot register"
+$cpuSource = Replace-ExactlyOnce $cpuSource '            HL = 0x007C;  // H=0x00, L=0x7C - GBC specific' '            HL = 0x000D;  // CGB boot-ROM post-boot value' "CGB HL boot register"
+[System.IO.File]::WriteAllText($cpuPath, $cpuSource, [System.Text.UTF8Encoding]::new($false))
+
+$emulatorPath = Join-Path $vendor "Emulator.cs"
+$emulatorSource = [System.IO.File]::ReadAllText($emulatorPath)
+$emulatorSource = Replace-ExactlyOnce $emulatorSource '            Mmu.WriteByte(IORegisters.VBK, 0xFF);  // VRAM Bank Select - Bank 0' '            Mmu.WriteByte(IORegisters.VBK, 0xFE);  // CGB post-boot VBK: bank 0' "CGB VRAM bank default"
+$emulatorSource = Replace-ExactlyOnce $emulatorSource '            Mmu.WriteByte(IORegisters.SVBK, 0xFF); // WRAM Bank Select - Bank 1' '            Mmu.WriteByte(IORegisters.SVBK, 0xF8); // CGB post-boot SVBK: bank 1' "CGB WRAM bank default"
+
+# PPU/APU run in Game Boy dots and keep normal speed in CGB double-speed mode.
+# DIV/TIMA follow the CPU clock and therefore must receive the full instruction cycle count.
+$emulatorSource = Replace-ExactlyOnce $emulatorSource @'
+                Ppu.Step(machineCycles);
+                Timer.Tick(machineCycles);
+                Apu.Step(machineCycles);
+'@ @'
+                Ppu.Step(machineCycles);
+                Timer.Tick(cycles); // DIV/TIMA double with the CGB CPU clock; PPU/APU do not.
+                Apu.Step(machineCycles);
+'@ "CGB double-speed timer clock"
+[System.IO.File]::WriteAllText($emulatorPath, $emulatorSource, [System.Text.UTF8Encoding]::new($false))
+
+# Focused regressions: CGB post-boot state and doubled divider timing.
+$regressionTestsPath = Join-Path $vendor "GameboySharp.Tests/CgbStartupRegressionTests.cs"
+$regressionTests = @'
+using System;
+using System.IO;
+using Xunit;
+
+namespace GameboySharp.Tests;
+
+public sealed class CgbStartupRegressionTests
+{
+    private static string CreateTemporaryCgbRom()
+    {
+        byte[] rom = new byte[32 * 1024];
+        rom[0x0134] = 0x54;
+        rom[0x0135] = 0x45;
+        rom[0x0136] = 0x53;
+        rom[0x0137] = 0x54;
+        rom[0x0143] = 0x80; // CGB-compatible cartridge
+        rom[0x0147] = 0x00; // ROM-only cartridge
+        rom[0x0148] = 0x00; // 32 KiB ROM
+        rom[0x0149] = 0x00; // No external RAM
+
+        string path = Path.Combine(Path.GetTempPath(), $"pocketgb-cgb-{Guid.NewGuid():N}.gbc");
+        File.WriteAllBytes(path, rom);
+        return path;
+    }
+
+    [Fact]
+    public void CgbCartridgeStartsWithDocumentedCpuAndMemoryBankState()
+    {
+        Environment.SetEnvironmentVariable("GBSHARP_AUDIO", "none");
+        string path = CreateTemporaryCgbRom();
+
+        try
+        {
+            using var emulator = new Emulator();
+            emulator.LoadRom(path);
+
+            Assert.True(emulator.Mmu.IsGameBoyColor);
+            Assert.Equal((ushort)0x1180, emulator.Cpu.AF);
+            Assert.Equal((ushort)0x0000, emulator.Cpu.BC);
+            Assert.Equal((ushort)0xFF56, emulator.Cpu.DE);
+            Assert.Equal((ushort)0x000D, emulator.Cpu.HL);
+            Assert.Equal(0, emulator.Mmu.CurrentVramBank);
+            Assert.Equal(1, emulator.Mmu.CurrentWramBank);
+            Assert.Equal((byte)0xFE, emulator.Mmu.ReadByte(0xFF4F));
+            Assert.Equal((byte)0xF8, emulator.Mmu.ReadByte(0xFF70));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void CgbDoubleSpeedAdvancesDividerAtTwiceTheDotClockRate()
+    {
+        Environment.SetEnvironmentVariable("GBSHARP_AUDIO", "none");
+        string path = CreateTemporaryCgbRom();
+
+        try
+        {
+            using var emulator = new Emulator();
+            emulator.LoadRom(path);
+
+            emulator.Mmu.WriteByte(0xFF4D, 0x01);
+            emulator.Mmu.PerformSpeedSwitch();
+            Assert.True(emulator.Mmu.IsDoubleSpeedMode);
+
+            // One emulated frame is 70,224 PPU dots. In CGB double-speed mode the CPU
+            // executes 140,448 T-cycles, so DIV increments 548 times (low byte = 0x24).
+            emulator.RunFrame();
+
+            Assert.Equal((byte)0x24, emulator.Timer.ReadDIV());
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void CgbEchoRamReadsFollowTheSelectedWramBank()
+    {
+        Environment.SetEnvironmentVariable("GBSHARP_AUDIO", "none");
+        string path = CreateTemporaryCgbRom();
+
+        try
+        {
+            using var emulator = new Emulator();
+            emulator.LoadRom(path);
+
+            emulator.Mmu.WriteByte(0xFF70, 0x02);
+            emulator.Mmu.WriteByte(0xD123, 0x4A);
+            Assert.Equal((byte)0x4A, emulator.Mmu.ReadByte(0xF123));
+
+            emulator.Mmu.WriteByte(0xFF70, 0x03);
+            Assert.NotEqual((byte)0x4A, emulator.Mmu.ReadByte(0xF123));
+            emulator.Mmu.WriteByte(0xD123, 0x66);
+            Assert.Equal((byte)0x66, emulator.Mmu.ReadByte(0xF123));
+
+            emulator.Mmu.WriteByte(0xFF70, 0x02);
+            Assert.Equal((byte)0x4A, emulator.Mmu.ReadByte(0xF123));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+}
+'@
+$testDirectory = Split-Path -Parent $regressionTestsPath
+New-Item -ItemType Directory -Force $testDirectory | Out-Null
+[System.IO.File]::WriteAllText($regressionTestsPath, $regressionTests, [System.Text.UTF8Encoding]::new($false))
+
+
+# Preserve the SVBK register's written value separately from the physical bank mapping.
+# On hardware, writing 0 maps bank 1 but reads back as 0 (F8 with upper bits set).
+$mmuPath = Join-Path $vendor "Core/Mmu.cs"
+$mmuSource = [System.IO.File]::ReadAllText($mmuPath)
+$mmuSource = Replace-ExactlyOnce $mmuSource '        private byte _wramBank = 1; // Current WRAM bank (1-7, bank 0 is fixed)' @'
+        private byte _wramBank = 0; // SVBK register bits; zero maps physical WRAM bank 1
+        private byte EffectiveWramBank => _wramBank == 0 ? (byte)1 : _wramBank;
+'@ "SVBK register storage"
+$mmuSource = Replace-ExactlyOnce $mmuSource '        public byte CurrentWramBank => _wramBank;' '        public byte CurrentWramBank => EffectiveWramBank;' "effective WRAM bank diagnostic"
+$bankIndexCount = ([regex]::Matches($mmuSource, [regex]::Escape('int bankIndex = _wramBank;'))).Count
+if ($bankIndexCount -ne 2) { throw "Expected exactly two WRAM bank access sites, found $bankIndexCount." }
+$mmuSource = $mmuSource.Replace('int bankIndex = _wramBank;', 'int bankIndex = EffectiveWramBank;')
+$mmuSource = Replace-ExactlyOnce $mmuSource '            _wramBank = 1;' '            _wramBank = 0;' "SVBK reset register value"
+$mmuSource = Replace-ExactlyOnce $mmuSource '                        byte newBank = (byte)(value & 0x07); // Only bits 0-2 are used' '                        _wramBank = (byte)(value & 0x07); // Preserve register value; zero maps to physical bank 1' "SVBK register write"
+$mmuSource = Replace-ExactlyOnce $mmuSource '                        if (newBank == 0) newBank = 1; // Bank 0 is not accessible, use bank 1 instead' '' "SVBK bank-zero remapping"
+$mmuSource = Replace-ExactlyOnce $mmuSource '                        _wramBank = newBank;' '' "SVBK effective bank assignment removal"
+$mmuSource = Replace-ExactlyOnce $mmuSource '                        Log.Debug($"WRAM bank switched to: {_wramBank}");' '                        Log.Debug($"WRAM bank register set to: {_wramBank}; physical bank: {EffectiveWramBank}");' "SVBK bank diagnostic"
+# CGB echo RAM is a true mirror of the selected WRAM bank, not the DMG flat RAM array.
+$echoReadCount = ([regex]::Matches($mmuSource, [regex]::Escape('return _memory[mirroredAddress];'))).Count
+if ($echoReadCount -ne 2) { throw "Expected the two CGB echo-RAM read paths, found $echoReadCount." }
+$mmuSource = $mmuSource.Replace('return _memory[mirroredAddress];', 'return ReadWramByte(mirroredAddress);')
+
+[System.IO.File]::WriteAllText($mmuPath, $mmuSource, [System.Text.UTF8Encoding]::new($false))
+
+Write-Host "CGB post-boot registers, bank defaults and double-speed timer clock patched with regression tests." -ForegroundColor Green
