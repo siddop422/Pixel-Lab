@@ -738,4 +738,197 @@ if (Test-Path $programPath) {
     [System.IO.File]::WriteAllText($programPath, $program, [System.Text.UTF8Encoding]::new($false))
 }
 
+
+# Broaden standard cartridge handling and reject mapper fallbacks that would corrupt gameplay.
+$mmuPath = Join-Path $vendor "Core/Mmu.cs"
+$headerPath = Join-Path $vendor "Core/RomHeader.cs"
+$romRamPath = Join-Path $vendor "Storage/RomRam.cs"
+$testsPath = Join-Path $vendor "GameboySharp.Tests/CartridgeCompatibilityTests.cs"
+
+$mmu = [System.IO.File]::ReadAllText($mmuPath)
+$mmu = Replace-ExactlyOnce $mmu '        private IMbc CreateMbc(byte cartridgeType, byte[] romData, int ramSize)' '        internal static IMbc CreateMbc(byte cartridgeType, byte[] romData, int ramSize)' "cartridge factory visibility"
+$mmu = Replace-ExactlyOnce $mmu @'
+                case 0x00: // ROM ONLY
+                    return new RomOnly(romData);
+'@ @'
+                case 0x00: // ROM ONLY
+                    return new RomOnly(romData);
+
+                case 0x08: // ROM + RAM (no mapper)
+                    return new RomRam(romData, ramSize, hasBattery: false);
+
+                case 0x09: // ROM + RAM + Battery (no mapper)
+                    return new RomRam(romData, ramSize, hasBattery: true);
+'@ "ROM+RAM cartridge types"
+$mmu = Replace-ExactlyOnce $mmu @'
+                default:
+                    Log.Warning($"Unsupported cartridge type 0x{cartridgeType:X2}, falling back to ROM-only");
+                    return new RomOnly(romData);
+'@ @'
+                default:
+                    throw new NotSupportedException(
+                        $"Unsupported Game Boy cartridge mapper 0x{cartridgeType:X2}. " +
+                        "PocketGB will not silently emulate this cartridge as ROM-only because banking and saves would be incorrect.");
+'@ "unsupported mapper handling"
+[System.IO.File]::WriteAllText($mmuPath, $mmu, [System.Text.UTF8Encoding]::new($false))
+
+$header = [System.IO.File]::ReadAllText($headerPath)
+$header = Replace-ExactlyOnce $header '                RomSize = 32 * 1024 << romData[0x0148],' '                RomSize = DecodeRomSize(romData[0x0148]),' "ROM size decoding"
+$header = Replace-ExactlyOnce $header '        public static RomHeader Parse(byte[] romData)' @'
+        private static int DecodeRomSize(byte sizeCode)
+        {
+            if (sizeCode <= 0x08)
+                return checked(32 * 1024 * (1 << sizeCode));
+
+            // Three valid non-power-of-two ROM sizes defined by the Game Boy cartridge header.
+            return sizeCode switch
+            {
+                0x52 => 72 * 0x4000, // 1.125 MiB
+                0x53 => 80 * 0x4000, // 1.25 MiB
+                0x54 => 96 * 0x4000, // 1.5 MiB
+                _ => throw new InvalidDataException($"Invalid Game Boy ROM size code 0x{sizeCode:X2}.")
+            };
+        }
+
+        public static RomHeader Parse(byte[] romData)
+'@ "special ROM size code helper"
+[System.IO.File]::WriteAllText($headerPath, $header, [System.Text.UTF8Encoding]::new($false))
+
+$romRam = @'
+using System.IO;
+
+namespace GameboySharp
+{
+    /// <summary>
+    /// ROM+RAM cartridge without a memory bank controller (cartridge types 0x08/0x09).
+    /// The small external RAM window mirrors when the cartridge contains 2 KiB.
+    /// </summary>
+    public sealed class RomRam : IMbc
+    {
+        private readonly byte[] _romData;
+        private readonly byte[] _ramData;
+        private readonly bool _hasBattery;
+
+        public bool IsRamEnabled => _ramData.Length > 0;
+        public int CurrentRomBank => 1;
+        public int CurrentRamBank => 0;
+        public bool HasBattery => _hasBattery;
+
+        public RomRam(byte[] romData, int ramSize, bool hasBattery)
+        {
+            _romData = romData ?? throw new ArgumentNullException(nameof(romData));
+            if (_romData.Length > 0x8000)
+                throw new NotSupportedException("ROM+RAM cartridges without a mapper cannot address ROM larger than 32 KiB.");
+            if (ramSize < 0 || ramSize > 0x2000)
+                throw new ArgumentOutOfRangeException(nameof(ramSize), "ROM+RAM cartridges support up to 8 KiB of external RAM.");
+
+            _ramData = new byte[ramSize];
+            Array.Fill(_ramData, (byte)0xFF);
+            _hasBattery = hasBattery;
+        }
+
+        public byte ReadRom(ushort address) =>
+            address < 0x8000 && address < _romData.Length ? _romData[address] : (byte)0xFF;
+
+        public void WriteRom(ushort address, byte value) { }
+
+        public byte ReadRam(ushort address)
+        {
+            if (_ramData.Length == 0 || address < 0xA000 || address >= 0xC000) return 0xFF;
+            int index = (address - 0xA000) % _ramData.Length;
+            return _ramData[index];
+        }
+
+        public void WriteRam(ushort address, byte value)
+        {
+            if (_ramData.Length == 0 || address < 0xA000 || address >= 0xC000) return;
+            int index = (address - 0xA000) % _ramData.Length;
+            _ramData[index] = value;
+        }
+
+        public byte[] GetRam() => _ramData;
+
+        public void SetRam(byte[] data)
+        {
+            if (data == null || _ramData.Length == 0) return;
+            Array.Copy(data, _ramData, Math.Min(data.Length, _ramData.Length));
+        }
+
+        public void SaveState(BinaryWriter writer)
+        {
+            writer.Write(_ramData.Length);
+            writer.Write(_ramData);
+        }
+
+        public void LoadState(BinaryReader reader)
+        {
+            int length = reader.ReadInt32();
+            if (length < 0 || length > 0x2000) throw new InvalidDataException("Invalid ROM+RAM state size.");
+            SetRam(reader.ReadBytes(length));
+        }
+    }
+}
+'@
+[System.IO.File]::WriteAllText($romRamPath, $romRam, [System.Text.UTF8Encoding]::new($false))
+
+$testCode = @'
+using GameboySharp;
+using Xunit;
+
+namespace GameboySharp.Tests;
+
+public sealed class CartridgeCompatibilityTests
+{
+    [Theory]
+    [InlineData(0x52, 72 * 0x4000)]
+    [InlineData(0x53, 80 * 0x4000)]
+    [InlineData(0x54, 96 * 0x4000)]
+    [InlineData(0x08, 8 * 1024 * 1024)]
+    public void ParsesStandardAndSpecialRomSizes(byte sizeCode, int expectedBytes)
+    {
+        byte[] rom = new byte[0x150];
+        rom[0x148] = sizeCode;
+        RomHeader header = RomHeader.Parse(rom);
+        Assert.Equal(expectedBytes, header.RomSize);
+    }
+
+    [Fact]
+    public void SupportsRomPlusRamCartridgeAndMirrorsTwoKilobyteRam()
+    {
+        byte[] rom = new byte[0x8000];
+        IMbc mbc = Mmu.CreateMbc(0x08, rom, 0x800);
+        Assert.False(mbc.HasBattery);
+        Assert.Equal(0x800, mbc.GetRam().Length);
+        mbc.WriteRam(0xA000, 0x42);
+        Assert.Equal(0x42, mbc.ReadRam(0xA800));
+    }
+
+    [Fact]
+    public void RomPlusRamBatteryVariantPersistsBatteryFlag()
+    {
+        IMbc mbc = Mmu.CreateMbc(0x09, new byte[0x8000], 0x2000);
+        Assert.True(mbc.HasBattery);
+    }
+
+    [Fact]
+    public void UnsupportedMapperIsReportedInsteadOfSilentlyFallingBackToRomOnly()
+    {
+        var exception = Assert.Throws<NotSupportedException>(
+            () => Mmu.CreateMbc(0x22, new byte[0x8000], 0x2000));
+        Assert.Contains("0x22", exception.Message);
+    }
+
+    [Fact]
+    public void RejectsInvalidRomSizeHeaderCode()
+    {
+        byte[] rom = new byte[0x150];
+        rom[0x148] = 0x55;
+        Assert.Throws<InvalidDataException>(() => RomHeader.Parse(rom));
+    }
+}
+'@
+$testsDirectory = Split-Path -Parent $testsPath
+New-Item -ItemType Directory -Force $testsDirectory | Out-Null
+[System.IO.File]::WriteAllText($testsPath, $testCode, [System.Text.UTF8Encoding]::new($false))
+
 Write-Host "PocketGB display controls, shader filters, temporal blending and GPU diagnostics prepared." -ForegroundColor Green
