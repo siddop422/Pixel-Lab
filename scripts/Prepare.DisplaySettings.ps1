@@ -975,10 +975,10 @@ public sealed class CgbStartupRegressionTests
     private static string CreateTemporaryCgbRom()
     {
         byte[] rom = new byte[32 * 1024];
-        rom[0x0134] = (byte)'\''T'\'';
-        rom[0x0135] = (byte)'\''E'\'';
-        rom[0x0136] = (byte)'\''S'\'';
-        rom[0x0137] = (byte)'\''T'\'';
+        rom[0x0134] = 0x54;
+        rom[0x0135] = 0x45;
+        rom[0x0136] = 0x53;
+        rom[0x0137] = 0x54;
         rom[0x0143] = 0x80; // CGB-compatible cartridge
         rom[0x0147] = 0x00; // ROM-only cartridge
         rom[0x0148] = 0x00; // 32 KiB ROM
