@@ -80,7 +80,7 @@ jobs:
           retention-days: 30
 
       - name: Publish official PocketGB v1.2.0 GitHub Release
-        if: github.event_name == 'push' && startsWith(github.event.head_commit.message, 'release: PocketGB v1.2.0')
+        if: "${{ github.event_name == 'push' && startsWith(github.event.head_commit.message, 'release: PocketGB v1.2.0') }}"
         uses: softprops/action-gh-release@v2
         with:
           tag_name: pocketgb-v1.2.0
