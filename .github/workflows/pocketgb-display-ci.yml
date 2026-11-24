@@ -1,0 +1,37 @@
+name: PocketGB Display Settings CI
+
+on:
+  push:
+    branches:
+      - pocketgb-display-settings
+  pull_request:
+    branches:
+      - pocketgb-emulator
+      - pocketgb-display-settings
+
+permissions:
+  contents: read
+
+jobs:
+  windows-build-and-test:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout with emulator submodule
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Apply PocketGB patches
+        shell: pwsh
+        run: ./scripts/Prepare.ps1
+
+      - name: Run emulator tests
+        run: dotnet test ./vendor/GameboySharp/GameboySharp.sln -c Release --no-restore
+
+      - name: Build PocketGB
+        run: dotnet publish ./vendor/GameboySharp/GameboySharp.csproj -c Release -r win-x64 --self-contained true -p:AssemblyName=PocketGB -o ./artifacts/PocketGB
