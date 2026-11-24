@@ -1,4 +1,4 @@
-name: PocketGB Display Settings CI
+name: PocketGB 1.2 Windows Build, Test and Release
 
 on:
   push:
@@ -10,28 +10,115 @@ on:
       - pocketgb-display-settings
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  windows-build-and-test:
+  windows-build-test-installer:
+    name: Test and package Windows x64
     runs-on: windows-latest
     steps:
-      - name: Checkout with emulator submodule
+      - name: Checkout PocketGB and pinned emulator core
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Install .NET 8
+      - name: Install .NET 9 SDK
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: 9.0.x
 
-      - name: Apply PocketGB patches
+      - name: Prepare PocketGB source, icon and compatibility tests
         shell: pwsh
         run: ./scripts/Prepare.ps1
 
-      - name: Run emulator tests
-        run: dotnet test ./vendor/GameboySharp/GameboySharp.sln -c Release
+      - name: Run emulator and cartridge compatibility tests
+        env:
+          GBSHARP_AUDIO: none
+        shell: pwsh
+        run: dotnet test ./vendor/GameboySharp/GameboySharp.sln --configuration Release --verbosity minimal
 
-      - name: Build PocketGB
-        run: dotnet publish ./vendor/GameboySharp/GameboySharp.csproj -c Release -r win-x64 --self-contained true -p:AssemblyName=PocketGB -o ./artifacts/PocketGB
+      - name: Publish self-contained optimized Windows x64 application
+        shell: pwsh
+        run: |
+          dotnet publish ./vendor/GameboySharp/GameboySharp.csproj --configuration Release --runtime win-x64 --self-contained true -p:AssemblyName=PocketGB -p:Version=1.2.0 -p:PublishReadyToRun=true -p:TieredPGO=true -p:DebugType=none -p:DebugSymbols=false --output ./publish
+          if ($LASTEXITCODE -ne 0) { throw "PocketGB publish failed." }
+          if (-not (Test-Path ./publish/PocketGB.exe)) { throw "PocketGB.exe was not produced." }
+          if (-not (Test-Path ./publish/PocketGB.ico)) { throw "PocketGB icon resource/source was not copied into publish output." }
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --yes --no-progress
+
+      - name: Build versioned PocketGB installer and portable ZIP
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force ./dist | Out-Null
+          $compiler = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $compiler)) { throw "Inno Setup compiler was not found at $compiler" }
+          & $compiler /DAppVersion="1.2.0" /DPublishDir="..\publish" ./install/PocketGB.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed to build PocketGB-Setup-1.2.0.exe." }
+          if (-not (Test-Path ./dist/PocketGB-Setup-1.2.0.exe)) { throw "The expected installer file is missing." }
+          Compress-Archive -Path ./publish/* -DestinationPath ./dist/PocketGB-Portable-1.2.0.zip -CompressionLevel Optimal
+          Get-ChildItem ./dist -File | Where-Object { $_.Name -ne "SHA256SUMS.txt" } | ForEach-Object {
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($_.Name)"
+          } | Set-Content ./dist/SHA256SUMS.txt -Encoding ascii
+
+      - name: Upload verified Windows release files
+        uses: actions/upload-artifact@v4
+        with:
+          name: PocketGB-Windows-x64
+          path: |
+            dist/PocketGB-Setup-1.2.0.exe
+            dist/PocketGB-Portable-1.2.0.zip
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30
+
+  publish-release:
+    name: Publish PocketGB v1.2.0
+    needs: windows-build-test-installer
+    if: github.event_name == 'push' && startsWith(github.event.head_commit.message, 'release: PocketGB v1.2.0')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download verified Windows release files
+        uses: actions/download-artifact@v4
+        with:
+          name: PocketGB-Windows-x64
+          path: release-assets
+
+      - name: List release assets
+        run: find release-assets -maxdepth 2 -type f -printf '%f %s bytes\n'
+
+      - name: Publish official PocketGB release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: pocketgb-v1.2.0
+          target_commitish: pocketgb-display-settings
+          name: PocketGB v1.2.0
+          body: |
+            PocketGB 1.2.0 adds expanded display settings, branding, installer upgrades, and safer cartridge handling.
+
+            Windows x64 downloads:
+            - PocketGB-Setup-1.2.0.exe — per-user installer that upgrades existing PocketGB installations using the preserved application ID.
+            - PocketGB-Portable-1.2.0.zip — self-contained portable build.
+            - SHA256SUMS.txt — SHA-256 checksums for both downloads.
+
+            Graphics:
+            - Custom window dimensions, fullscreen, V-Sync, nearest/bilinear/sharp-bilinear filtering.
+            - LCD/CRT effects, brightness/saturation and an optional low-end profile.
+            - OpenGL 3.3 is the only graphics API implemented by this build. Audio backend options remain Auto, SDL and OpenAL.
+            - Temporal frame blending is experimental visual blending, not true AI/motion-vector frame generation or FPS doubling.
+
+            Compatibility:
+            - Game Boy and Game Boy Color core.
+            - Standard ROM-only, MBC1, MBC2, MBC3 and MBC5 controller implementations, plus ROM+RAM variants.
+            - GBA is not supported; GBA requires a separate emulator core. Several uncommon Game Boy mappers are also not implemented and are reported clearly instead of silently falling back.
+
+            Automated tests and a Windows self-contained publish must pass before this release is created. The installer is not Authenticode-signed; verify SHA256SUMS.txt and download only from this official GitHub release.
+          draft: false
+          prerelease: false
+          files: |
+            release-assets/PocketGB-Setup-1.2.0.exe
+            release-assets/PocketGB-Portable-1.2.0.zip
+            release-assets/SHA256SUMS.txt
