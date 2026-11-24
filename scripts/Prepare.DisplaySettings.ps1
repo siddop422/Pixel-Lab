@@ -436,7 +436,7 @@ namespace GameboySharp
             }
         }
 
-        private uint CreateFrameTexture()
+        private unsafe uint CreateFrameTexture()
         {
             uint texture = _gl.GenTexture();
             _gl.BindTexture(TextureTarget.Texture2D, texture);
