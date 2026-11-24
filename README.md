@@ -1,44 +1,70 @@
 # PocketGB
 
-PocketGB is a lightweight desktop emulator for original Game Boy and Game Boy Color games. It includes a clean dark-green interface, save states, automatic cartridge saves, keyboard/gamepad input, and a self-contained runtime.
+![PocketGB logo](assets/PocketGB-logo.svg)
 
-## Download
+PocketGB is a lightweight desktop emulator for original Nintendo Game Boy and Game Boy Color cartridges. It includes save states, automatic cartridge saves, keyboard/gamepad input, configurable display filters, window/fullscreen controls, and a self-contained runtime.
 
-Open [PocketGB Releases](https://github.com/siddop422/Pixel-Lab/releases) and choose the build for your computer:
+## Latest Windows build
 
-| Platform | Download |
+The current release is available from the official [PocketGB GitHub Releases page](https://github.com/siddop422/Pixel-Lab/releases).
+
+| Download | What it is |
 | --- | --- |
-| Windows 10/11 (64-bit Intel/AMD) | **PocketGB-Setup-1.1.0.exe** — installer with Start Menu and optional desktop shortcuts |
-| Windows (portable) | **PocketGB-Portable-1.1.0.zip** — extract and run |
-| Linux x64 | **PocketGB-Linux-x64-1.1.0.tar.gz** — extract and run the PocketGB executable |
-| macOS Apple Silicon | **PocketGB-macOS-Apple-Silicon-1.1.0.tar.gz** — extract and open the PocketGB.app bundle |
+| **PocketGB-Setup-1.2.0.exe** | Windows 10/11 x64 installer. Installs per-user, adds Start Menu shortcuts, and can optionally add a desktop shortcut or associate .gb/.gbc files. |
+| **PocketGB-Portable-1.2.0.zip** | Self-contained Windows x64 portable build. Extract and run `PocketGB.exe`. |
+| **SHA256SUMS.txt** | SHA-256 hashes for verifying the exact downloaded files. |
 
-All builds are self-contained: you do not need to install .NET separately. Linux and macOS require a working OpenGL 3.3-compatible graphics driver. The macOS bundle is ad-hoc signed, not Apple-notarized; when Gatekeeper blocks it, remove the quarantine attribute after extracting:
+The installer keeps the same application ID and install directory between versions, so running a newer setup over PocketGB 1.1.0 upgrades that installation instead of creating a second app entry. User configuration and game saves are stored separately from the application directory.
 
-~~~bash
-xattr -dr com.apple.quarantine PocketGB.app
-~~~
+**Safe download guidance:** download only from the official GitHub Releases page linked above. Compare the installer/ZIP hash with `SHA256SUMS.txt` before running it. The Windows installer is not Authenticode-signed, so Windows SmartScreen may show an unknown-publisher warning; a checksum confirms file integrity, not publisher identity.
 
-## Features
+## What's new in 1.2.0
 
-- Game Boy (DMG) and Game Boy Color (CGB) emulation.
-- ROM browser, drag-and-drop and recent games.
-- Direct .gb, .gbc, and .sgb loading, plus ZIP archives containing supported ROMs.
-- ZIP extraction is cached safely; replacing an archive with another ROM invalidates the old cache. Battery saves and save states are kept beside the original ZIP, not inside the cache.
-- Ten save-state slots per game, with thumbnails and timestamps.
-- Quick save (F5) and quick load (F8); number keys 0–9 select the active slot.
-- Automatic battery-backed cartridge saves (.sav), including MBC3 RTC data.
-- Four audio channels, mute and volume controls, with SDL audio and OpenAL fallback.
-- 0.5× / 1× / 2× speed selection and hold-to-fast-forward.
-- Configurable keyboard and gamepad bindings.
-- Integer scaling, aspect-ratio lock, DMG colour palettes, scanline options, and screenshots.
-- Windowed resolution presets, fullscreen mode, and optional V-Sync.
-- GPU upscaling filters: nearest-neighbour, bilinear, and sharp-bilinear.
-- Optional LCD pixel-grid and CRT curvature/vignette shader effects, plus brightness and saturation controls.
-- Experimental previous/current-frame blending with an adjustable mix amount (a visual blending effect, not AI or motion-vector frame generation).
-- Live OpenGL renderer, GPU vendor, and driver-version diagnostics in Video settings.
-- Optional CPU, memory, VRAM and sprite debugging tools.
-- Drift-resistant frame pacing and lower overhead while the debug window is hidden.
+- PocketGB application, taskbar, and installer icon branding.
+- Larger, scrollable display settings with custom window width/height, fullscreen, and V-Sync.
+- Nearest-neighbour, bilinear, and sharp-bilinear GPU texture filtering.
+- LCD grid, scanlines, CRT curvature/vignette, brightness, and saturation.
+- Experimental temporal frame blending. This blends adjacent frames and can cause ghosting; it does **not** use motion vectors, interpolate object movement, or double the real game FPS.
+- Live OpenGL vendor, renderer, and driver/version diagnostics.
+- A low-end graphics profile that disables optional post-processing and frame blending.
+- Correct ROM header handling for special Game Boy ROM size codes 0x52, 0x53, and 0x54.
+- Standard ROM+RAM and ROM+RAM+battery cartridge handling.
+- Unsupported cartridge mapper IDs now produce an explicit error instead of being silently treated as ROM-only.
+
+## Systems and cartridge compatibility
+
+| System / cartridge | Status |
+| --- | --- |
+| Original Game Boy (DMG) | Supported by the current core |
+| Game Boy Color (CGB) | Supported by the current core |
+| Standard ROM-only, MBC1, MBC2, MBC3, and MBC5 types | Implemented |
+| ROM+RAM and ROM+RAM+battery (0x08/0x09) | Implemented in this update |
+| Special ROM size codes 0x52/0x53/0x54 | Header parsing implemented |
+| MBC6, MBC7, MMM01, HuC-1, HuC-3, TAMA5, Pocket Camera | Not implemented yet; the emulator now reports unsupported mapper IDs clearly |
+| Super Game Boy enhancements | Not implemented |
+| Game Boy Advance (.gba) | **Not supported** |
+
+PocketGB is a Game Boy / Game Boy Color emulator, not a universal handheld emulator. GBA uses different hardware and requires a separate GBA emulation core. A `.gba` file cannot be made compatible by changing its extension or adding it to the file picker. No commercial ROMs or BIOS files are included.
+
+“Supported” means the core has an implementation for the listed system/controller; it is not a claim that every commercial or homebrew ROM has been individually tested. The repository's automated tests cover core components and cartridge parsing, but do not establish a 100% compatibility rate. Please report a reproducible issue with the ROM title and mapper information when a game fails.
+
+## Display and graphics
+
+- Window resolution presets and custom window width/height.
+- Fullscreen and V-Sync.
+- Integer scaling and 10:9 aspect-ratio lock.
+- Nearest-neighbour (pixel-perfect), bilinear, and sharp-bilinear texture filters.
+- DMG green, grey, Pocket, and yellow palettes.
+- Optional scanlines, LCD pixel grid, and CRT curvature/vignette.
+- Brightness and saturation adjustment.
+- Experimental temporal frame blending.
+- A low-end profile for weaker CPUs/GPUs.
+
+**Resolution note:** these settings change the desktop window/output size. The emulated Game Boy framebuffer remains 160×144 pixels; a larger output resolution does not increase the original console's internal resolution or create new game detail.
+
+**Graphics backends:** OpenGL 3.3 Core is the only implemented graphics API in this build. The Video tab reports the active GPU vendor, renderer, and driver/version. Vulkan and Direct3D are not exposed as selectable options because working renderers for those APIs have not been implemented.
+
+**Audio backends:** Settings includes Auto, SDL, and OpenAL. A backend change applies after restarting PocketGB.
 
 ## Controls
 
@@ -58,48 +84,47 @@ xattr -dr com.apple.quarantine PocketGB.app
 | Show / hide debug tools | F11 |
 | Reset | R |
 
-Keys and gamepad mappings can be changed in Settings.
+Keyboard and gamepad bindings can be changed in Settings.
 
-## Saves
+## Saves and supported files
 
-Save states capture the whole emulator at that moment and are stored as <game>.state0 through <game>.state9. Battery-backed game saves are stored as <game>.sav and are written automatically while playing and when exiting. You can choose a dedicated save folder in Settings.
+- Ten save-state slots per game, with thumbnails and timestamps.
+- Quick save (F5) and quick load (F8).
+- Automatic battery-backed cartridge saves (.sav), including MBC3 RTC data.
+- Save files and states are stored next to the original ROM, or in the optional save folder.
+- Direct .gb, .gbc, and .sgb cartridge images, plus ZIP archives containing those files.
+- ZIP extraction is cached; replacing an archive invalidates the old cache. Save files remain beside the original ZIP, not in the cache.
+- ZIP entries are limited to 64 MiB. 7z and RAR archives are not supported.
 
-## Supported files
+## Performance and requirements
 
-Open your own legally obtained Game Boy ROM files (.gb, .gbc, or .sgb) directly or inside a .zip archive. When a ZIP contains multiple supported ROMs, PocketGB selects the first entry in a stable order: files at the archive root first, then folders, alphabetically. ROM extraction is limited to 64 MB per entry.
+- Windows 10/11 x64 with an OpenGL 3.3-compatible graphics driver.
+- The application bundles its .NET runtime and native application dependencies; a separate .NET install is not required.
+- A recent Intel, AMD, or NVIDIA graphics driver is recommended.
+- On low-end hardware, use the Low-end / maximum performance preset, pixel-perfect scaling, and keep CRT/LCD effects and temporal blending disabled.
 
-No commercial games, BIOS files, or copyrighted ROMs are included. PocketGB does not currently extract 7z or RAR archives; extract those with your archive utility first.
-
-## Compatibility and performance
-
-- **Windows:** Windows 10 or 11, 64-bit x64 processor, OpenGL 3.3-compatible GPU.
-- **Linux:** x64 desktop distribution with OpenGL 3.3 and its normal graphics/audio runtime libraries.
-- **macOS:** Apple Silicon, macOS 12 or newer.
-- A recent graphics driver is recommended. On Windows, update the Intel/NVIDIA/AMD display driver if the app reports that an OpenGL context or shader cannot be created.
-- A software OpenGL driver may work, but hardware acceleration is strongly recommended.
-
-The UI scales with the window, and fractional downscaling is used when the available area is smaller than one native Game Boy screen. Frame pacing uses high-resolution deadlines and only a short final wait, which helps avoid timing drift without busy-waiting for an entire frame.
+The core renders at the Game Boy's native frame rate. The FPS counter measures application presentation/rendering and can vary with window composition, GPU drivers, V-Sync, and system load.
 
 ## Build from source
 
 This branch uses the MIT-licensed [GameboySharp emulator core](https://github.com/sokie/gameboy_sharp), pinned as a Git submodule.
 
-~~~bash
-git clone --recurse-submodules --branch pocketgb-emulator https://github.com/siddop422/Pixel-Lab.git PocketGB
+```powershell
+git clone --recurse-submodules --branch pocketgb-display-settings https://github.com/siddop422/Pixel-Lab.git PocketGB
 cd PocketGB
 pwsh ./scripts/Prepare.ps1
 dotnet test ./vendor/GameboySharp/GameboySharp.sln -c Release
-dotnet publish ./vendor/GameboySharp/GameboySharp.csproj -c Release -r win-x64 --self-contained true -p:AssemblyName=PocketGB -p:Version=1.1.0 -o publish
-~~~
+dotnet publish ./vendor/GameboySharp/GameboySharp.csproj -c Release -r win-x64 --self-contained true -p:AssemblyName=PocketGB -p:Version=1.2.0 -o publish
+```
 
-To build the Windows setup wizard, install Inno Setup 6 and run PowerShell:
+To build the Windows installer, install Inno Setup 6 and run:
 
-~~~powershell
-& "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe" /DAppVersion="1.1.0" /DPublishDir="..\publish" .\install\PocketGB.iss
-~~~
+```powershell
+& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion="1.2.0" /DPublishDir="..\publish" .\install\PocketGB.iss
+```
 
 ## Credits and license
 
-The emulation engine is based on [sokie/gameboy_sharp](https://github.com/sokie/gameboy_sharp), licensed under the MIT License. Its copyright and license notice are preserved in vendor/GameboySharp/LICENSE and THIRD-PARTY-NOTICES.md.
+The emulation engine is based on [sokie/gameboy_sharp](https://github.com/sokie/gameboy_sharp), licensed under the MIT License. Its copyright and license notice are preserved in `vendor/GameboySharp/LICENSE` and `THIRD-PARTY-NOTICES.md`.
 
 PocketGB is an independent community project and is not affiliated with or endorsed by Nintendo.
