@@ -19,6 +19,25 @@ function Replace-ExactlyOnce([string]$Source, [string]$Old, [string]$New, [strin
     return $Source.Replace($Old, $New)
 }
 
+# Convert the compact, version-controlled icon source into a native ICO during every build.
+$iconSource = Join-Path $root "assets/PocketGB.ico.b64"
+$iconOutput = Join-Path $root "assets/PocketGB.ico"
+if (-not (Test-Path $iconSource)) { throw "Missing PocketGB icon source: $iconSource" }
+$iconBytes = [Convert]::FromBase64String(([System.IO.File]::ReadAllText($iconSource)).Trim())
+[System.IO.File]::WriteAllBytes($iconOutput, $iconBytes)
+
+# Embed the same PocketGB icon into the Windows application executable.
+$projectPath = Join-Path $vendor "GameboySharp.csproj"
+$project = [System.IO.File]::ReadAllText($projectPath)
+if (-not $project.Contains('<ApplicationIcon Condition="''$(RuntimeIdentifier)'' == ''win-x64''">PocketGB.ico</ApplicationIcon>')) {
+    $project = Replace-ExactlyOnce $project '    <Nullable>enable</Nullable>' @'
+    <Nullable>enable</Nullable>
+    <ApplicationIcon Condition="'$(RuntimeIdentifier)' == 'win-x64'">PocketGB.ico</ApplicationIcon>
+'@ "Windows executable icon project setting"
+}
+[System.IO.File]::Copy($iconOutput, (Join-Path $vendor "PocketGB.ico"), $true)
+[System.IO.File]::WriteAllText($projectPath, $project, [System.Text.UTF8Encoding]::new($false))
+
 # Persisted display settings. Defaults intentionally preserve the existing lightweight pixel-perfect look.
 $config = [System.IO.File]::ReadAllText($configPath)
 $config = Replace-ExactlyOnce $config '    public class EmulatorConfig' @'
@@ -143,6 +162,26 @@ $newVideoMethod = @'
             }
             ImGui.TextDisabled("V-Sync synchronizes presentation with your monitor.");
 
+            ImGui.SeparatorText("Custom window resolution");
+            int customWidth = Math.Clamp(_config.WindowWidth, 320, 3840);
+            int customHeight = Math.Clamp(_config.WindowHeight, 288, 2160);
+            ImGui.InputInt("Width (px)", ref customWidth);
+            ImGui.InputInt("Height (px)", ref customHeight);
+            customWidth = Math.Clamp(customWidth, 320, 3840);
+            customHeight = Math.Clamp(customHeight, 288, 2160);
+            if (ImGui.Button("Apply custom resolution"))
+            {
+                _resizeWindow(customWidth, customHeight);
+                _persist();
+            }
+            ImGui.SameLine();
+            if (ImGui.Button("Reset to 640 x 576"))
+            {
+                _resizeWindow(640, 576);
+                _persist();
+            }
+            ImGui.TextDisabled("These settings change the application window size, not the Game Boy's native 160 x 144 resolution.");
+
             ImGui.SeparatorText("Scaling and upscaling");
             string[] palettes = { "Green", "Grey", "Pocket", "Yellow" };
             int palette = (int)_config.Video.Palette;
@@ -184,22 +223,53 @@ $newVideoMethod = @'
             if (ImGui.SliderFloat("Saturation", ref saturation, 0.0f, 2.0f))
                 _config.Video.Saturation = saturation;
 
+            ImGui.SeparatorText("Quick graphics profiles");
+            if (ImGui.Button("Low-end / maximum performance"))
+            {
+                _config.Video.IntegerScale = true;
+                _config.Video.LockAspectRatio = true;
+                _config.Video.UpscaleMode = VideoUpscaleMode.PixelPerfect;
+                _config.Video.FrameGeneration = false;
+                _config.Video.FrameBlendAmount = 0.0f;
+                _config.Video.LcdGrid = false;
+                _config.Video.CrtCurve = false;
+                _config.Video.ScanlineShader = false;
+                _config.Video.Brightness = 1.0f;
+                _config.Video.Saturation = 1.0f;
+                _config.Video.VSync = false;
+                _setVSync(false);
+                _persist();
+            }
+            ImGui.SameLine();
+            if (ImGui.Button("Retro display"))
+            {
+                _config.Video.IntegerScale = true;
+                _config.Video.LockAspectRatio = true;
+                _config.Video.UpscaleMode = VideoUpscaleMode.PixelPerfect;
+                _config.Video.FrameGeneration = false;
+                _config.Video.LcdGrid = true;
+                _config.Video.CrtCurve = false;
+                _config.Video.ScanlineShader = true;
+                _persist();
+            }
+            ImGui.TextDisabled("Low-end mode disables extra shader passes and frame blending.");
+            
             ImGui.SeparatorText("Frame presentation");
             bool frameGeneration = _config.Video.FrameGeneration;
-            if (ImGui.Checkbox("Experimental frame blending", ref frameGeneration))
+            if (ImGui.Checkbox("Experimental temporal frame blending", ref frameGeneration))
                 _config.Video.FrameGeneration = frameGeneration;
 
             float blend = _config.Video.FrameBlendAmount;
             if (ImGui.SliderFloat("Blend amount", ref blend, 0.0f, 0.5f))
                 _config.Video.FrameBlendAmount = blend;
-            ImGui.TextDisabled("This blends adjacent frames and can create ghosting. It is not AI or motion-vector frame generation.");
+            ImGui.TextDisabled("Blends adjacent frames and can create ghosting. It does not interpolate motion or double the real game FPS.");
 
             ImGui.SeparatorText("Graphics renderer backend");
-            ImGui.TextUnformatted("API: OpenGL 3.3 Core");
+            ImGui.TextUnformatted("Active graphics API: OpenGL 3.3 Core");
             ImGui.TextWrapped($"GPU vendor: {_renderer.GraphicsVendor}");
             ImGui.TextWrapped($"GPU renderer: {_renderer.GraphicsRenderer}");
             ImGui.TextWrapped($"Driver / OpenGL version: {_renderer.GraphicsVersion}");
-            ImGui.TextDisabled("OpenGL is the currently implemented backend. Vulkan and Direct3D are not available in this build.");
+            ImGui.TextDisabled("Only OpenGL 3.3 is currently implemented as a graphics backend. Vulkan and Direct3D are not selectable in this build; the Audio tab has separate SDL / OpenAL backend selection.");
         }
 
 '@
