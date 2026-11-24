@@ -30,6 +30,12 @@ Add freely redistributable test ROMs to CI or a local test folder; do not bundle
 
 A compatibility claim should be based on pass/fail results, not just that a game reaches its title screen. Keep per-ROM results in CI artifacts; tests requiring proprietary ROMs remain opt-in.
 
+### Latest Windows validation
+
+- [GitHub Actions run 45477234491](https://github.com/siddop422/Pixel-Lab/actions/runs/45477234491): preparation passed, **85 tests passed, 0 failed, 7 skipped**, self-contained Windows x64 publish passed, Inno Setup installer and portable ZIP built, and release artifacts uploaded.
+- The seven skipped tests need external ROM or CPU-vector datasets that are not bundled in the repository. The new CGB register/bank, double-speed divider and echo-RAM regression tests were included in the passing suite.
+- NuGet reports security advisories for the test-only `SixLabors.ImageSharp 2.1.13` dependency used by screenshot tests. It is not part of the shipped emulator runtime, but the test dependency should be reviewed/upgraded or replaced separately. The build still completed with these warnings.
+
 ## 3. Clean backend architecture
 
 ### Current implementation
