@@ -1,0 +1,19 @@
+name: PocketGB CI Runner Smoke Test
+
+on:
+  push:
+    branches:
+      - pocketgb-accuracy-diagnostics
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  runner-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify GitHub Actions runner
+        run: |
+          echo "PocketGB GitHub Actions runner is available."
+          uname -a
