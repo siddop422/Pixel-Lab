@@ -1058,8 +1058,24 @@ $mmuSource = Replace-ExactlyOnce $mmuSource '        private byte _wramBank = 1;
         private byte EffectiveWramBank => _wramBank == 0 ? (byte)1 : _wramBank;
 '@ "SVBK register storage"
 $mmuSource = Replace-ExactlyOnce $mmuSource '        public byte CurrentWramBank => _wramBank;' '        public byte CurrentWramBank => EffectiveWramBank;' "effective WRAM bank diagnostic"
-$mmuSource = Replace-ExactlyOnce $mmuSource '                    int bankIndex = _wramBank;' '                    int bankIndex = EffectiveWramBank;' "WRAM read bank mapping"
-$mmuSource = Replace-ExactlyOnce $mmuSource '                    int bankIndex = _wramBank;' '                    int bankIndex = EffectiveWramBank;' "WRAM write bank mapping"
+$mmuSource = Replace-ExactlyOnce $mmuSource @'
+                    int bankIndex = _wramBank;
+                    int offset = address - 0xD000;
+                    return _wramBanks[bankIndex][offset];
+'@ @'
+                    int bankIndex = EffectiveWramBank;
+                    int offset = address - 0xD000;
+                    return _wramBanks[bankIndex][offset];
+'@ "WRAM read bank mapping"
+$mmuSource = Replace-ExactlyOnce $mmuSource @'
+                    int bankIndex = _wramBank;
+                    int offset = address - 0xD000;
+                    _wramBanks[bankIndex][offset] = value;
+'@ @'
+                    int bankIndex = EffectiveWramBank;
+                    int offset = address - 0xD000;
+                    _wramBanks[bankIndex][offset] = value;
+'@ "WRAM write bank mapping"
 $mmuSource = Replace-ExactlyOnce $mmuSource '            _wramBank = 1;' '            _wramBank = 0;' "SVBK reset register value"
 $mmuSource = Replace-ExactlyOnce $mmuSource @'
                         byte newBank = (byte)(value & 0x07); // Only bits 0-2 are used
