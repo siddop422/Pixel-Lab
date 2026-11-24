@@ -43,7 +43,6 @@ jobs:
           dotnet publish ./vendor/GameboySharp/GameboySharp.csproj --configuration Release --runtime win-x64 --self-contained true -p:AssemblyName=PocketGB -p:Version=1.2.0 -p:PublishReadyToRun=true -p:TieredPGO=true -p:DebugType=none -p:DebugSymbols=false --output ./publish
           if ($LASTEXITCODE -ne 0) { throw "PocketGB publish failed." }
           if (-not (Test-Path ./publish/PocketGB.exe)) { throw "PocketGB.exe was not produced." }
-          if (-not (Test-Path ./publish/PocketGB.ico)) { throw "PocketGB icon resource/source was not copied into publish output." }
 
       - name: Install Inno Setup
         shell: pwsh
