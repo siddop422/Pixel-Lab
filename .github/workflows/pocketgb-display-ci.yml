@@ -10,7 +10,7 @@ on:
       - pocketgb-display-settings
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-test-installer:
@@ -78,3 +78,40 @@ jobs:
             dist/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish official PocketGB v1.2.0 GitHub Release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: pocketgb-v1.2.0
+          target_commitish: pocketgb-display-settings
+          name: PocketGB v1.2.0
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: true
+          files: |
+            dist/PocketGB-Setup-1.2.0.exe
+            dist/PocketGB-Portable-1.2.0.zip
+            dist/SHA256SUMS.txt
+          body: |
+            PocketGB 1.2.0 — the latest Windows x64 build.
+
+            Downloads:
+            - **PocketGB-Setup-1.2.0.exe** — self-contained per-user installer. It keeps the existing PocketGB application ID and install location so installing 1.2.0 upgrades the existing 1.1.0 install.
+            - **PocketGB-Portable-1.2.0.zip** — self-contained portable Windows build.
+            - **SHA256SUMS.txt** — SHA-256 checksums for both downloads.
+
+            Display and graphics:
+            - Custom window dimensions, fullscreen, V-Sync, nearest/bilinear/sharp-bilinear scaling.
+            - LCD grid, scanlines, CRT vignette/curvature, brightness and saturation controls.
+            - Low-end profile to disable optional effects.
+            - OpenGL 3.3 is the only implemented graphics API. Audio backend options are Auto, SDL and OpenAL.
+            - Temporal frame blending is an experimental visual blend, not motion-vector frame generation or FPS doubling.
+
+            Compatibility:
+            - Game Boy and Game Boy Color core.
+            - ROM-only, MBC1, MBC2, MBC3, MBC5, standard ROM+RAM and ROM+RAM+battery implementations.
+            - Special ROM-size header codes 0x52, 0x53 and 0x54 are handled.
+            - Some uncommon cartridge mappers are not implemented and are reported clearly. Game Boy Advance is not supported by this build.
+
+            Automated tests, the self-contained Windows publish, and Inno Setup compilation must all pass before release creation. The installer is not Authenticode-signed; use the checksums to verify file integrity and download only from this official GitHub release.
