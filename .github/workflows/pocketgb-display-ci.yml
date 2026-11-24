@@ -31,7 +31,7 @@ jobs:
         run: ./scripts/Prepare.ps1
 
       - name: Run emulator tests
-        run: dotnet test ./vendor/GameboySharp/GameboySharp.sln -c Release --no-restore
+        run: dotnet test ./vendor/GameboySharp/GameboySharp.sln -c Release
 
       - name: Build PocketGB
         run: dotnet publish ./vendor/GameboySharp/GameboySharp.csproj -c Release -r win-x64 --self-contained true -p:AssemblyName=PocketGB -o ./artifacts/PocketGB
