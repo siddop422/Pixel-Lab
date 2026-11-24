@@ -1008,7 +1008,7 @@ public sealed class CgbStartupRegressionTests
             Assert.Equal(0, emulator.Mmu.CurrentVramBank);
             Assert.Equal(1, emulator.Mmu.CurrentWramBank);
             Assert.Equal((byte)0xFE, emulator.Mmu.ReadByte(0xFF4F));
-            Assert.Equal((byte)0xF9, emulator.Mmu.ReadByte(0xFF70));
+            Assert.Equal((byte)0xF8, emulator.Mmu.ReadByte(0xFF70));
         }
         finally
         {
@@ -1047,5 +1047,29 @@ public sealed class CgbStartupRegressionTests
 $testDirectory = Split-Path -Parent $regressionTestsPath
 New-Item -ItemType Directory -Force $testDirectory | Out-Null
 [System.IO.File]::WriteAllText($regressionTestsPath, $regressionTests, [System.Text.UTF8Encoding]::new($false))
+
+
+# Preserve the SVBK register's written value separately from the physical bank mapping.
+# On hardware, writing 0 maps bank 1 but reads back as 0 (F8 with upper bits set).
+$mmuPath = Join-Path $vendor "Core/Mmu.cs"
+$mmuSource = [System.IO.File]::ReadAllText($mmuPath)
+$mmuSource = Replace-ExactlyOnce $mmuSource '        private byte _wramBank = 1; // Current WRAM bank (1-7, bank 0 is fixed)' @'
+        private byte _wramBank = 0; // SVBK register bits; zero maps physical WRAM bank 1
+        private byte EffectiveWramBank => _wramBank == 0 ? (byte)1 : _wramBank;
+'@ "SVBK register storage"
+$mmuSource = Replace-ExactlyOnce $mmuSource '        public byte CurrentWramBank => _wramBank;' '        public byte CurrentWramBank => EffectiveWramBank;' "effective WRAM bank diagnostic"
+$mmuSource = Replace-ExactlyOnce $mmuSource '                    int bankIndex = _wramBank;' '                    int bankIndex = EffectiveWramBank;' "WRAM read bank mapping"
+$mmuSource = Replace-ExactlyOnce $mmuSource '                    int bankIndex = _wramBank;' '                    int bankIndex = EffectiveWramBank;' "WRAM write bank mapping"
+$mmuSource = Replace-ExactlyOnce $mmuSource '            _wramBank = 1;' '            _wramBank = 0;' "SVBK reset register value"
+$mmuSource = Replace-ExactlyOnce $mmuSource @'
+                        byte newBank = (byte)(value & 0x07); // Only bits 0-2 are used
+                        if (newBank == 0) newBank = 1; // Bank 0 is not accessible, use bank 1 instead
+                        _wramBank = newBank;
+                        Log.Debug($"WRAM bank switched to: {_wramBank}");
+'@ @'
+                        _wramBank = (byte)(value & 0x07); // Preserve the register value; zero maps to physical bank 1
+                        Log.Debug($"WRAM bank register set to: {_wramBank}; physical bank: {EffectiveWramBank}");
+'@ "SVBK write/readback behavior"
+[System.IO.File]::WriteAllText($mmuPath, $mmuSource, [System.Text.UTF8Encoding]::new($false))
 
 Write-Host "CGB post-boot registers, bank defaults and double-speed timer clock patched with regression tests." -ForegroundColor Green
