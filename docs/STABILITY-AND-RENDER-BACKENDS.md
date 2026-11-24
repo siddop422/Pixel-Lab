@@ -4,11 +4,12 @@
 
 The screenshot's **KERNEL PANIC** is rendered by the game running inside the Game Boy. It is not, by itself, proof of a Windows or GPU-driver crash. The emulator needs hardware-accuracy tests and a diagnostic report before attributing a game's panic to graphics hardware.
 
-This branch fixes two concrete CGB timing/startup defects found in the pinned core:
+This branch patches three concrete CGB startup/memory/timing defects found in the pinned core:
 
 - CGB post-boot CPU registers are set to the documented CGB values: `AF=1180`, `BC=0000`, `DE=FF56`, `HL=000D`, `SP=FFFE`, `PC=0100`.
 - CGB post-boot bank defaults are VRAM bank 0 (`VBK=FE` readback) and WRAM bank 1 (`SVBK=F8` readback; selector 0 maps to physical bank 1).
 - In double-speed mode, the PPU and APU still advance at the Game Boy dot clock, but DIV/TIMA advance at the doubled CPU clock. The frame loop now gives `Timer.Tick` the full CPU-cycle count while retaining the half-rate count for PPU/APU.
+- CGB echo-RAM reads (`E000`–`FDFF`) now use the same bank-aware WRAM read path as direct WRAM access, matching the existing bank-aware write path.
 
 The patch is applied by `scripts/Prepare.DisplaySettings.ps1` because the emulator core is a pinned Git submodule. Regression tests are generated in `vendor/GameboySharp/GameboySharp.Tests/CgbStartupRegressionTests.cs` each build.
 
