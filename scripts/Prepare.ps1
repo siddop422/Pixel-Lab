@@ -737,3 +737,6 @@ if (-not $programFinal.Contains('emulator.LoadRom(RomFileLoader.ResolveRomPath(a
 }
 [System.IO.File]::WriteAllText($programPath, $programFinal, [System.Text.UTF8Encoding]::new($false))
 Write-Host "ZIP games now keep battery saves and save states beside the original archive." -ForegroundColor Green
+
+# Apply the optional PocketGB display, shader and graphics diagnostics layer.
+& (Join-Path $PSScriptRoot "Prepare.DisplaySettings.ps1")
