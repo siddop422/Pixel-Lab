@@ -34,7 +34,6 @@ WizardStyle=modern
 Compression=lzma2/ultra64
 SolidCompression=yes
 UninstallDisplayIcon={app}\{#AppExeName}
-CloseApplications=yes
 ChangesAssociations=yes
 LicenseFile=..\LICENSE
 
