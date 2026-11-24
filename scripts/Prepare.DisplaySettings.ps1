@@ -939,7 +939,7 @@ Write-Host "PocketGB display controls, shader filters, temporal blending and GPU
 # and selected bank 1/7 instead of the post-boot VRAM bank 0 / WRAM bank 1.
 $cpuPath = Join-Path $vendor "Core/Cpu.cs"
 $cpuSource = [System.IO.File]::ReadAllText($cpuPath)
-$cpuSource = Replace-ExactlyOnce $cpuSource '            DE = 0x0008;  // D=0x00 E=0x08 - GBC specific' '            DE = 0xFF56;  // CGB boot-ROM post-boot value' "CGB DE boot register"
+$cpuSource = Replace-ExactlyOnce $cpuSource '            DE = 0x0008;  // D=0x00, E=0x08 - GBC specific  ' '            DE = 0xFF56;  // CGB boot-ROM post-boot value' "CGB DE boot register"
 $cpuSource = Replace-ExactlyOnce $cpuSource '            HL = 0x007C;  // H=0x00, L=0x7C - GBC specific' '            HL = 0x000D;  // CGB boot-ROM post-boot value' "CGB HL boot register"
 [System.IO.File]::WriteAllText($cpuPath, $cpuSource, [System.Text.UTF8Encoding]::new($false))
 
@@ -1058,34 +1058,14 @@ $mmuSource = Replace-ExactlyOnce $mmuSource '        private byte _wramBank = 1;
         private byte EffectiveWramBank => _wramBank == 0 ? (byte)1 : _wramBank;
 '@ "SVBK register storage"
 $mmuSource = Replace-ExactlyOnce $mmuSource '        public byte CurrentWramBank => _wramBank;' '        public byte CurrentWramBank => EffectiveWramBank;' "effective WRAM bank diagnostic"
-$mmuSource = Replace-ExactlyOnce $mmuSource @'
-                    int bankIndex = _wramBank;
-                    int offset = address - 0xD000;
-                    return _wramBanks[bankIndex][offset];
-'@ @'
-                    int bankIndex = EffectiveWramBank;
-                    int offset = address - 0xD000;
-                    return _wramBanks[bankIndex][offset];
-'@ "WRAM read bank mapping"
-$mmuSource = Replace-ExactlyOnce $mmuSource @'
-                    int bankIndex = _wramBank;
-                    int offset = address - 0xD000;
-                    _wramBanks[bankIndex][offset] = value;
-'@ @'
-                    int bankIndex = EffectiveWramBank;
-                    int offset = address - 0xD000;
-                    _wramBanks[bankIndex][offset] = value;
-'@ "WRAM write bank mapping"
+$bankIndexCount = ([regex]::Matches($mmuSource, [regex]::Escape('int bankIndex = _wramBank;'))).Count
+if ($bankIndexCount -ne 2) { throw "Expected exactly two WRAM bank access sites, found $bankIndexCount." }
+$mmuSource = $mmuSource.Replace('int bankIndex = _wramBank;', 'int bankIndex = EffectiveWramBank;')
 $mmuSource = Replace-ExactlyOnce $mmuSource '            _wramBank = 1;' '            _wramBank = 0;' "SVBK reset register value"
-$mmuSource = Replace-ExactlyOnce $mmuSource @'
-                        byte newBank = (byte)(value & 0x07); // Only bits 0-2 are used
-                        if (newBank == 0) newBank = 1; // Bank 0 is not accessible, use bank 1 instead
-                        _wramBank = newBank;
-                        Log.Debug($"WRAM bank switched to: {_wramBank}");
-'@ @'
-                        _wramBank = (byte)(value & 0x07); // Preserve the register value; zero maps to physical bank 1
-                        Log.Debug($"WRAM bank register set to: {_wramBank}; physical bank: {EffectiveWramBank}");
-'@ "SVBK write/readback behavior"
+$mmuSource = Replace-ExactlyOnce $mmuSource '                        byte newBank = (byte)(value & 0x07); // Only bits 0-2 are used' '                        _wramBank = (byte)(value & 0x07); // Preserve register value; zero maps to physical bank 1' "SVBK register write"
+$mmuSource = Replace-ExactlyOnce $mmuSource '                        if (newBank == 0) newBank = 1; // Bank 0 is not accessible, use bank 1 instead' '' "SVBK bank-zero remapping"
+$mmuSource = Replace-ExactlyOnce $mmuSource '                        _wramBank = newBank;' '' "SVBK effective bank assignment removal"
+$mmuSource = Replace-ExactlyOnce $mmuSource '                        Log.Debug($"WRAM bank switched to: {_wramBank}");' '                        Log.Debug($"WRAM bank register set to: {_wramBank}; physical bank: {EffectiveWramBank}");' "SVBK bank diagnostic"
 [System.IO.File]::WriteAllText($mmuPath, $mmuSource, [System.Text.UTF8Encoding]::new($false))
 
 Write-Host "CGB post-boot registers, bank defaults and double-speed timer clock patched with regression tests." -ForegroundColor Green
