@@ -43,9 +43,16 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Publish failed." }
           if (-not (Test-Path ./publish/PocketGB.exe)) { throw "PocketGB.exe missing." }
 
-      - name: Install Inno Setup
+      - name: Ensure Inno Setup is available
         shell: pwsh
-        run: choco install innosetup --yes --no-progress
+        run: |
+          $compiler = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (Test-Path $compiler) {
+            Write-Host "Using preinstalled Inno Setup compiler: $compiler"
+          } else {
+            choco install innosetup --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { throw "Inno Setup installation failed." }
+          }
 
       - name: Build installer and portable ZIP
         shell: pwsh
