@@ -932,3 +932,120 @@ New-Item -ItemType Directory -Force $testsDirectory | Out-Null
 [System.IO.File]::WriteAllText($testsPath, $testCode, [System.Text.UTF8Encoding]::new($false))
 
 Write-Host "PocketGB display controls, shader filters, temporal blending and GPU diagnostics prepared." -ForegroundColor Green
+
+
+# CGB startup correctness and double-speed timer regression fixes.
+# The prior implementation used the DMG-compatibility CGB register values for all CGB games,
+# and selected bank 1/7 instead of the post-boot VRAM bank 0 / WRAM bank 1.
+$cpuPath = Join-Path $vendor "Core/Cpu.cs"
+$cpuSource = [System.IO.File]::ReadAllText($cpuPath)
+$cpuSource = Replace-ExactlyOnce $cpuSource '            DE = 0x0008;  // D=0x00 E=0x08 - GBC specific' '            DE = 0xFF56;  // CGB boot-ROM post-boot value' "CGB DE boot register"
+$cpuSource = Replace-ExactlyOnce $cpuSource '            HL = 0x007C;  // H=0x00, L=0x7C - GBC specific' '            HL = 0x000D;  // CGB boot-ROM post-boot value' "CGB HL boot register"
+[System.IO.File]::WriteAllText($cpuPath, $cpuSource, [System.Text.UTF8Encoding]::new($false))
+
+$emulatorPath = Join-Path $vendor "Emulator.cs"
+$emulatorSource = [System.IO.File]::ReadAllText($emulatorPath)
+$emulatorSource = Replace-ExactlyOnce $emulatorSource '            Mmu.WriteByte(IORegisters.VBK, 0xFF);  // VRAM Bank Select - Bank 0' '            Mmu.WriteByte(IORegisters.VBK, 0xFE);  // CGB post-boot VBK: bank 0' "CGB VRAM bank default"
+$emulatorSource = Replace-ExactlyOnce $emulatorSource '            Mmu.WriteByte(IORegisters.SVBK, 0xFF); // WRAM Bank Select - Bank 1' '            Mmu.WriteByte(IORegisters.SVBK, 0xF8); // CGB post-boot SVBK: bank 1' "CGB WRAM bank default"
+
+# PPU/APU run in Game Boy dots and keep normal speed in CGB double-speed mode.
+# DIV/TIMA follow the CPU clock and therefore must receive the full instruction cycle count.
+$emulatorSource = Replace-ExactlyOnce $emulatorSource @'
+                Ppu.Step(machineCycles);
+                Timer.Tick(machineCycles);
+                Apu.Step(machineCycles);
+'@ @'
+                Ppu.Step(machineCycles);
+                Timer.Tick(cycles); // DIV/TIMA double with the CGB CPU clock; PPU/APU do not.
+                Apu.Step(machineCycles);
+'@ "CGB double-speed timer clock"
+[System.IO.File]::WriteAllText($emulatorPath, $emulatorSource, [System.Text.UTF8Encoding]::new($false))
+
+# Focused regressions: CGB post-boot state and doubled divider timing.
+$regressionTestsPath = Join-Path $vendor "GameboySharp.Tests/CgbStartupRegressionTests.cs"
+$regressionTests = @'
+using System;
+using System.IO;
+using Xunit;
+
+namespace GameboySharp.Tests;
+
+public sealed class CgbStartupRegressionTests
+{
+    private static string CreateTemporaryCgbRom()
+    {
+        byte[] rom = new byte[32 * 1024];
+        rom[0x0134] = (byte)'\''T'\'';
+        rom[0x0135] = (byte)'\''E'\'';
+        rom[0x0136] = (byte)'\''S'\'';
+        rom[0x0137] = (byte)'\''T'\'';
+        rom[0x0143] = 0x80; // CGB-compatible cartridge
+        rom[0x0147] = 0x00; // ROM-only cartridge
+        rom[0x0148] = 0x00; // 32 KiB ROM
+        rom[0x0149] = 0x00; // No external RAM
+
+        string path = Path.Combine(Path.GetTempPath(), $"pocketgb-cgb-{Guid.NewGuid():N}.gbc");
+        File.WriteAllBytes(path, rom);
+        return path;
+    }
+
+    [Fact]
+    public void CgbCartridgeStartsWithDocumentedCpuAndMemoryBankState()
+    {
+        Environment.SetEnvironmentVariable("GBSHARP_AUDIO", "none");
+        string path = CreateTemporaryCgbRom();
+
+        try
+        {
+            using var emulator = new Emulator();
+            emulator.LoadRom(path);
+
+            Assert.True(emulator.Mmu.IsGameBoyColor);
+            Assert.Equal((ushort)0x1180, emulator.Cpu.AF);
+            Assert.Equal((ushort)0x0000, emulator.Cpu.BC);
+            Assert.Equal((ushort)0xFF56, emulator.Cpu.DE);
+            Assert.Equal((ushort)0x000D, emulator.Cpu.HL);
+            Assert.Equal(0, emulator.Mmu.CurrentVramBank);
+            Assert.Equal(1, emulator.Mmu.CurrentWramBank);
+            Assert.Equal((byte)0xFE, emulator.Mmu.ReadByte(0xFF4F));
+            Assert.Equal((byte)0xF9, emulator.Mmu.ReadByte(0xFF70));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void CgbDoubleSpeedAdvancesDividerAtTwiceTheDotClockRate()
+    {
+        Environment.SetEnvironmentVariable("GBSHARP_AUDIO", "none");
+        string path = CreateTemporaryCgbRom();
+
+        try
+        {
+            using var emulator = new Emulator();
+            emulator.LoadRom(path);
+
+            emulator.Mmu.WriteByte(0xFF4D, 0x01);
+            emulator.Mmu.PerformSpeedSwitch();
+            Assert.True(emulator.Mmu.IsDoubleSpeedMode);
+
+            // One emulated frame is 70,224 PPU dots. In CGB double-speed mode the CPU
+            // executes 140,448 T-cycles, so DIV increments 548 times (low byte = 0x24).
+            emulator.RunFrame();
+
+            Assert.Equal((byte)0x24, emulator.Timer.ReadDIV());
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+}
+'@
+$testDirectory = Split-Path -Parent $regressionTestsPath
+New-Item -ItemType Directory -Force $testDirectory | Out-Null
+[System.IO.File]::WriteAllText($regressionTestsPath, $regressionTests, [System.Text.UTF8Encoding]::new($false))
+
+Write-Host "CGB post-boot registers, bank defaults and double-speed timer clock patched with regression tests." -ForegroundColor Green
