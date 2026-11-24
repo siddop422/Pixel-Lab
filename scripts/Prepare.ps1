@@ -57,6 +57,11 @@ if (-not $window.Contains('private void DrawWelcomeScreen()')) {
             colors[(int)ImGuiCol.HeaderActive] = new Vector4(0.24f, 0.45f, 0.29f, 1f);
             colors[(int)ImGuiCol.TitleBg] = new Vector4(0.045f, 0.065f, 0.060f, 1f);
             colors[(int)ImGuiCol.TitleBgActive] = new Vector4(0.08f, 0.13f, 0.10f, 1f);
+            colors[(int)ImGuiCol.Tab] = new Vector4(0.10f, 0.19f, 0.13f, 1f);
+            colors[(int)ImGuiCol.TabHovered] = new Vector4(0.17f, 0.36f, 0.22f, 1f);
+            colors[(int)ImGuiCol.TabActive] = new Vector4(0.13f, 0.30f, 0.18f, 1f);
+            colors[(int)ImGuiCol.TabUnfocused] = new Vector4(0.08f, 0.14f, 0.10f, 1f);
+            colors[(int)ImGuiCol.TabUnfocusedActive] = new Vector4(0.10f, 0.22f, 0.14f, 1f);
         }
 
         private void DrawWelcomeScreen()
