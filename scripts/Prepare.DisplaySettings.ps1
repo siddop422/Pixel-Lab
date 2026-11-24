@@ -657,4 +657,15 @@ void main()
 '@
 [System.IO.File]::WriteAllText($shaderPath, $fragmentShader, [System.Text.UTF8Encoding]::new($false))
 
+
+# When V-Sync is enabled, let the swap interval pace presentation instead of sleeping a second time.
+$programPath = Join-Path $vendor "Program.cs"
+if (Test-Path $programPath) {
+    $program = [System.IO.File]::ReadAllText($programPath)
+    $program = Replace-ExactlyOnce $program '            if (gameWindow.TurboActive)' @'
+            if (gameWindow.TurboActive || config.Video.VSync)
+'@ "V-Sync frame pacing"
+    [System.IO.File]::WriteAllText($programPath, $program, [System.Text.UTF8Encoding]::new($false))
+}
+
 Write-Host "PocketGB display controls, shader filters, temporal blending and GPU diagnostics prepared." -ForegroundColor Green
