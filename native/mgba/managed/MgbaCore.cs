@@ -488,69 +488,69 @@ internal sealed unsafe class MgbaCore : IDisposable
     [DllImport(NativeLibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern IntPtr pgb_mgba_create();
 
-    [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(NativeLibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern void pgb_mgba_destroy(IntPtr context);
 
-    [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(NativeLibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern IntPtr pgb_mgba_last_error(IntPtr context);
 
-    [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(NativeLibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern int pgb_mgba_load_rom(IntPtr context, byte* rom, nuint romBytes);
 
-    [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(NativeLibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern int pgb_mgba_run_frame(IntPtr context);
 
-    [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(NativeLibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern IntPtr pgb_mgba_video_pixels(IntPtr context);
 
-    [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(NativeLibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern int pgb_mgba_video_width(IntPtr context);
 
-    [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(NativeLibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern int pgb_mgba_video_height(IntPtr context);
 
-    [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(NativeLibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern int pgb_mgba_platform(IntPtr context);
 
-    [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(NativeLibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern void pgb_mgba_game_title(IntPtr context, StringBuilder destination, nuint capacity);
 
-    [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(NativeLibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern void pgb_mgba_game_code(IntPtr context, StringBuilder destination, nuint capacity);
 
-    [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(NativeLibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern double pgb_mgba_frame_rate(IntPtr context);
 
-    [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(NativeLibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern void pgb_mgba_set_keys(IntPtr context, uint keys);
 
-    [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(NativeLibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern int pgb_mgba_audio_sample_rate(IntPtr context);
 
-    [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(NativeLibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern int pgb_mgba_audio_available(IntPtr context);
 
-    [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(NativeLibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern int pgb_mgba_audio_read(IntPtr context, short* destination, int frames);
 
-    [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(NativeLibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern nuint pgb_mgba_state_size(IntPtr context);
 
-    [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(NativeLibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern int pgb_mgba_save_state(IntPtr context, byte* destination, nuint capacity);
 
-    [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(NativeLibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern int pgb_mgba_load_state(IntPtr context, byte* source, nuint size);
 
-    [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(NativeLibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern nuint pgb_mgba_savedata_size(IntPtr context);
 
-    [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(NativeLibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern nuint pgb_mgba_savedata_copy(IntPtr context, byte* destination, nuint capacity);
 
-    [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(NativeLibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern int pgb_mgba_savedata_load(IntPtr context, byte* source, nuint size);
 
-    [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(NativeLibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern void pgb_mgba_reset(IntPtr context);
 }
