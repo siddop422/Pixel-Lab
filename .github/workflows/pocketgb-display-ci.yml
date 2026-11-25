@@ -21,6 +21,13 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Checkout pinned mGBA core source (MPL-2.0)
+        uses: actions/checkout@v4
+        with:
+          repository: mgba-emu/mgba
+          ref: 431935616c0e216d650b25b2ea0c0acccd359038
+          path: third_party/mgba
+
       - name: Setup .NET 9
         uses: actions/setup-dotnet@v4
         with:
@@ -29,6 +36,10 @@ jobs:
       - name: Prepare PocketGB source
         shell: pwsh
         run: ./scripts/Prepare.ps1
+
+      - name: Build core-only mGBA native adapter
+        shell: pwsh
+        run: ./scripts/Build-Mgba.ps1
 
       - name: Run tests
         env:
