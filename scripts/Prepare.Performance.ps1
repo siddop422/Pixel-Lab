@@ -296,3 +296,49 @@ $romLoader = Replace-ExactlyOnce $romLoader @'
                 if (!IsRomExtension(extension))
 '@ "GBA core requirement diagnostic"
 [System.IO.File]::WriteAllText($romLoaderPath, $romLoader, [System.Text.UTF8Encoding]::new($false))
+
+# Scheduler regression tests run in CI without distributing any copyrighted ROMs.
+$testsDirectory = Join-Path $vendor "GameboySharp.Tests"
+$testPath = Join-Path $testsDirectory "Performance/EmulationFramePacerTests.cs"
+New-Item -ItemType Directory -Force (Split-Path -Parent $testPath) | Out-Null
+$tests = @'
+using GameboySharp;
+using Xunit;
+
+namespace GameboySharp.Tests.Performance;
+
+public sealed class EmulationFramePacerTests
+{
+    private static int RunForOneSecond(double speed)
+    {
+        var pacer = new EmulationFramePacer();
+        int total = 0;
+        for (int i = 0; i < 60; i++)
+            total += pacer.Consume(1.0 / 60.0, speed, 60.0, paused: false);
+        return total;
+    }
+
+    [Fact] public void HalfSpeedAdvancesHalfAsManyFrames() => Assert.Equal(30, RunForOneSecond(0.5));
+    [Fact] public void NormalSpeedAdvancesOneGameSecond() => Assert.Equal(60, RunForOneSecond(1.0));
+    [Fact] public void DoubleSpeedAdvancesTwiceAsManyFrames() => Assert.Equal(120, RunForOneSecond(2.0));
+    [Fact] public void TurboAdvancesConfiguredFrameCount() => Assert.Equal(480, RunForOneSecond(8.0));
+
+    [Fact]
+    public void BatchIsBoundedAfterLongStall()
+    {
+        var pacer = new EmulationFramePacer();
+        Assert.Equal(32, pacer.Consume(5.0, 16.0, 60.0, paused: false));
+    }
+
+    [Fact]
+    public void PauseClearsFractionalFrameDebt()
+    {
+        var pacer = new EmulationFramePacer();
+        Assert.Equal(0, pacer.Consume(0.5 / 60.0, 1.0, 60.0, paused: false));
+        Assert.Equal(0, pacer.Consume(1.0, 8.0, 60.0, paused: true));
+        Assert.Equal(0, pacer.Consume(0.5 / 60.0, 1.0, 60.0, paused: false));
+        Assert.Equal(1, pacer.Consume(0.5 / 60.0, 1.0, 60.0, paused: false));
+    }
+}
+'@
+[System.IO.File]::WriteAllText($testPath, $tests, [System.Text.UTF8Encoding]::new($false))
