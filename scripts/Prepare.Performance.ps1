@@ -207,12 +207,12 @@ $window = Replace-ExactlyOnce $window '                _window.Title = $"PocketG
 # Make GBA files visible so the application can explain that the separate GBA engine is missing.
 $fileBrowserPath = Join-Path $vendor "UI/FileBrowser.cs"
 $fileBrowser = [System.IO.File]::ReadAllText($fileBrowserPath)
-$fileBrowser = Replace-ExactlyOnce $fileBrowser '        private static readonly string[] RomExtensions = { ".gb", ".gbc", ".sgb" };' '        private static readonly string[] RomExtensions = { ".gb", ".gbc", ".sgb", ".gba" };' "GBA file browser filter"
+$fileBrowser = Replace-ExactlyOnce $fileBrowser '        private static readonly string[] RomExtensions = { ".gb", ".gbc", ".sgb", ".zip" };' '        private static readonly string[] RomExtensions = { ".gb", ".gbc", ".sgb", ".zip", ".gba" };' "GBA file browser filter"
 [System.IO.File]::WriteAllText($fileBrowserPath, $fileBrowser, [System.Text.UTF8Encoding]::new($false))
 
 $windowPath = Join-Path $vendor "UI/GameWindow.cs"
 $window = [System.IO.File]::ReadAllText($windowPath)
-$window = Replace-ExactlyOnce $window '                if (extension is ".gb" or ".gbc" or ".sgb")' '                if (extension is ".gb" or ".gbc" or ".sgb" or ".gba")' "GBA drag/drop routing"
+$window = Replace-ExactlyOnce $window '                if (extension is ".gb" or ".gbc" or ".sgb" or ".zip")' '                if (extension is ".gb" or ".gbc" or ".sgb" or ".zip" or ".gba")' "GBA drag/drop routing"
 [System.IO.File]::WriteAllText($windowPath, $window, [System.Text.UTF8Encoding]::new($false))
 
 $romLoaderPath = Join-Path $vendor "RomFileLoader.cs"
