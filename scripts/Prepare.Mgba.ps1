@@ -423,3 +423,84 @@ $program = $program.Substring(0, $loopStart) + $loop + $program.Substring($loopE
 [System.IO.File]::WriteAllText($programPath, $program, [System.Text.UTF8Encoding]::new($false))
 
 Write-Host "mGBA command-line routing and unified GB/GBA frame scheduler prepared." -ForegroundColor Green
+
+
+# Test the complete managed-to-native path with a tiny synthetic GBA homebrew image.
+# The test ROM contains a valid GBA entry-point signature and loops in place after boot.
+$testDirectory = Join-Path $vendor "GameboySharp.Tests"
+$testPath = Join-Path $testDirectory "MgbaNativeSmokeTests.cs"
+$testSource = @'
+using System;
+using System.IO;
+using GameboySharp;
+using Xunit;
+
+namespace GameboySharp.Tests.Native;
+
+public sealed class MgbaNativeSmokeTests
+{
+    [Fact]
+    public void NativeCoreLoadsAndRunsSyntheticGbaCartridge()
+    {
+        Environment.SetEnvironmentVariable("GBSHARP_AUDIO", "none");
+
+        byte[] rom = new byte[32 * 1024];
+
+        // ARM branch from the GBA reset vector at 0x08000000 to 0x080000C0.
+        rom[0x00] = 0x2E;
+        rom[0x01] = 0x00;
+        rom[0x02] = 0x00;
+        rom[0x03] = 0xEA;
+
+        // A tight ARM branch-to-self loop at 0x080000C0 keeps the homebrew test ROM running.
+        rom[0xC0] = 0xFE;
+        rom[0xC1] = 0xFF;
+        rom[0xC2] = 0xFF;
+        rom[0xC3] = 0xEA;
+
+        // Required GBA cartridge header marker.
+        rom[0xB2] = 0x96;
+
+        // Printable title and game code for deterministic game-info parsing.
+        byte[] title = System.Text.Encoding.ASCII.GetBytes("PGB SMOKE   ");
+        Array.Copy(title, 0, rom, 0xA0, Math.Min(12, title.Length));
+        byte[] code = System.Text.Encoding.ASCII.GetBytes("PGBA");
+        Array.Copy(code, 0, rom, 0xAC, 4);
+
+        string path = Path.Combine(Path.GetTempPath(), $"pocketgb-mgba-smoke-{Guid.NewGuid():N}.gba");
+        string statePath = Path.ChangeExtension(path, ".state0");
+
+        File.WriteAllBytes(path, rom);
+        try
+        {
+            using var core = new MgbaCore(new EmulatorConfig());
+            core.LoadRom(path);
+
+            Assert.True(core.HasRom);
+            Assert.Equal(240, core.FrameWidth);
+            Assert.Equal(160, core.FrameHeight);
+            Assert.Equal(240 * 160, core.FrameBuffer.Length);
+
+            core.RunFrames(2);
+            Assert.Equal(240 * 160, core.FrameBuffer.Length);
+
+            core.SaveState();
+            Assert.True(File.Exists(statePath));
+            Assert.True(core.LoadState());
+            Assert.Equal(240, core.FrameWidth);
+            Assert.Equal(160, core.FrameHeight);
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+            if (File.Exists(statePath)) File.Delete(statePath);
+            Environment.SetEnvironmentVariable("GBSHARP_AUDIO", null);
+        }
+    }
+}
+'@
+
+New-Item -ItemType Directory -Force $testDirectory | Out-Null
+[System.IO.File]::WriteAllText($testPath, $testSource, [System.Text.UTF8Encoding]::new($false))
+
+Write-Host "Native mGBA GBA frame and save-state smoke test generated." -ForegroundColor Green
