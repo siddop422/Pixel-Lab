@@ -185,12 +185,12 @@ $methods = @'
                 ImGuiWindowFlags.NoInputs | ImGuiWindowFlags.AlwaysAutoResize;
             if (ImGui.Begin("##pocketgb-performance", flags))
             {
-                ImGui.Text("RENDER  {0:0} FPS", _fps);
-                ImGui.Text("GAME    {0:0.0} FPS", _emulatedFps);
+                ImGui.Text(string.Format("RENDER  {0:0} FPS", _fps));
+                ImGui.Text(string.Format("GAME    {0:0.0} FPS", _emulatedFps));
                 double measuredSpeed = _emulatedFps / GameboyConstants.FramesPerSecond;
                 ImGui.TextColored(_turboActive ? new Vector4(0.48f, 0.95f, 0.62f, 1f) :
                     new Vector4(0.78f, 0.86f, 0.81f, 1f),
-                    _turboActive ? "TURBO  {0:0.00}x" : "SPEED  {0:0.00}x", measuredSpeed);
+                    string.Format(_turboActive ? "TURBO  {0:0.00}x" : "SPEED  {0:0.00}x", measuredSpeed));
             }
             ImGui.End();
         }
@@ -264,3 +264,35 @@ $program = $program.Substring(0, $loopStart) + $loop + $program.Substring($loopE
 [System.IO.File]::WriteAllText($programPath, $program, [System.Text.UTF8Encoding]::new($false))
 
 Write-Host "Actual turbo frame advancement and on-screen FPS overlay prepared." -ForegroundColor Green
+
+# Make GBA files visible so the application can explain that the separate GBA engine is missing.
+$fileBrowserPath = Join-Path $vendor "UI/FileBrowser.cs"
+$fileBrowser = [System.IO.File]::ReadAllText($fileBrowserPath)
+$fileBrowser = Replace-ExactlyOnce $fileBrowser '        private static readonly string[] RomExtensions = { ".gb", ".gbc", ".sgb" };' '        private static readonly string[] RomExtensions = { ".gb", ".gbc", ".sgb", ".gba" };' "GBA file browser filter"
+[System.IO.File]::WriteAllText($fileBrowserPath, $fileBrowser, [System.Text.UTF8Encoding]::new($false))
+
+$windowPath = Join-Path $vendor "UI/GameWindow.cs"
+$window = [System.IO.File]::ReadAllText($windowPath)
+$window = Replace-ExactlyOnce $window '                if (extension is ".gb" or ".gbc" or ".sgb")' '                if (extension is ".gb" or ".gbc" or ".sgb" or ".gba")' "GBA drag/drop routing"
+[System.IO.File]::WriteAllText($windowPath, $window, [System.Text.UTF8Encoding]::new($false))
+
+$romLoaderPath = Join-Path $vendor "RomFileLoader.cs"
+$romLoader = [System.IO.File]::ReadAllText($romLoaderPath)
+$romLoader = Replace-ExactlyOnce $romLoader @'
+            string extension = Path.GetExtension(fullPath);
+            if (!extension.Equals(".zip", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!IsRomExtension(extension))
+'@ @'
+            string extension = Path.GetExtension(fullPath);
+            if (extension.Equals(".gba", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new NotSupportedException(
+                    "This is a Game Boy Advance ROM. The current PocketGB core only emulates Game Boy and Game Boy Color; a separate GBA core such as mGBA is required. The ROM file has not been modified.");
+            }
+
+            if (!extension.Equals(".zip", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!IsRomExtension(extension))
+'@ "GBA core requirement diagnostic"
+[System.IO.File]::WriteAllText($romLoaderPath, $romLoader, [System.Text.UTF8Encoding]::new($false))
