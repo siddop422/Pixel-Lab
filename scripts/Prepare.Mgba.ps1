@@ -133,7 +133,7 @@ $settings = Replace-ExactlyOnce $settings @'
             int coreIndex = (int)_config.General.EmulationBackend;
             if (ImGui.Combo("Emulation backend", ref coreIndex, coreNames, coreNames.Length))
                 _config.General.EmulationBackend = (EmulationBackend)coreIndex;
-            ImGui.TextDisabled("Auto uses mGBA for .gba and GameboySharp for .gb/.gbc. GBA always requires mGBA.");
+            ImGui.TextDisabled("Auto prefers mGBA for GB/GBC/GBA compatibility. GameboySharp remains available as a manual GB/GBC fallback.");
 
             string saveDir = _config.General.SaveDirectory;
 '@ "core selection UI"
@@ -180,7 +180,7 @@ $newLoadMethod = @'
                 string resolvedPath = RomFileLoader.ResolveRomPath(path);
                 string extension = Path.GetExtension(resolvedPath);
                 bool requiresMgba = extension.Equals(".gba", StringComparison.OrdinalIgnoreCase) ||
-                    _config.General.EmulationBackend == EmulationBackend.Mgba;
+                    _config.General.EmulationBackend != EmulationBackend.GameboySharp;
 
                 if (requiresMgba)
                 {
@@ -245,7 +245,7 @@ $startupBlock = @'
             {
                 string resolvedPath = RomFileLoader.ResolveRomPath(args[0]);
                 bool useMgba = Path.GetExtension(resolvedPath).Equals(".gba", StringComparison.OrdinalIgnoreCase) ||
-                    config.General.EmulationBackend == EmulationBackend.Mgba;
+                    config.General.EmulationBackend != EmulationBackend.GameboySharp;
                 if (useMgba) mgbaStartupRom = args[0];
                 else emulator.LoadRom(resolvedPath, args[0]);
                 config.AddRecentRom(args[0]);
@@ -439,6 +439,62 @@ namespace GameboySharp.Tests.Native;
 
 public sealed class MgbaNativeSmokeTests
 {
+    [Fact]
+    public void NativeCoreLoadsAndRunsSyntheticGbCartridge()
+    {
+        Environment.SetEnvironmentVariable("GBSHARP_AUDIO", "none");
+
+        byte[] rom = new byte[32 * 1024];
+        // A minimal program that loops forever at the cartridge entry point.
+        rom[0x100] = 0x18; // JR
+        rom[0x101] = 0xFE; // -2: branch back to 0x0100
+        // mGBA's cartridge detector checks the Nintendo logo prefix at 0x0104.
+        rom[0x104] = 0xCE;
+        rom[0x105] = 0xED;
+        rom[0x106] = 0x66;
+        rom[0x107] = 0x66;
+        byte[] title = System.Text.Encoding.ASCII.GetBytes("PGB GB TEST");
+        Array.Copy(title, 0, rom, 0x134, title.Length);
+        rom[0x147] = 0x00; // ROM-only
+        rom[0x148] = 0x00; // 32 KiB ROM
+        rom[0x149] = 0x00; // No external RAM
+
+        byte headerChecksum = 0;
+        for (int i = 0x134; i <= 0x14C; i++)
+            headerChecksum = (byte)(headerChecksum - rom[i] - 1);
+        rom[0x14D] = headerChecksum;
+
+        string path = Path.Combine(Path.GetTempPath(), $"pocketgb-mgba-gb-smoke-{Guid.NewGuid():N}.gb");
+        string statePath = Path.ChangeExtension(path, ".state0");
+        File.WriteAllBytes(path, rom);
+        try
+        {
+            using var core = new MgbaCore(new EmulatorConfig());
+            core.LoadRom(path);
+
+            Assert.True(core.HasRom);
+            Assert.Equal("Game Boy / Color", core.PlatformName);
+            Assert.Equal(160, core.FrameWidth);
+            Assert.Equal(144, core.FrameHeight);
+            Assert.Equal(160 * 144, core.FrameBuffer.Length);
+
+            core.RunFrames(2);
+            Assert.Equal(160 * 144, core.FrameBuffer.Length);
+
+            core.SaveState();
+            Assert.True(File.Exists(statePath));
+            Assert.True(core.LoadState());
+            Assert.Equal(160, core.FrameWidth);
+            Assert.Equal(144, core.FrameHeight);
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+            if (File.Exists(statePath)) File.Delete(statePath);
+            Environment.SetEnvironmentVariable("GBSHARP_AUDIO", null);
+        }
+    }
+
     [Fact]
     public void NativeCoreLoadsAndRunsSyntheticGbaCartridge()
     {
