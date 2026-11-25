@@ -140,3 +140,90 @@ $settings = Replace-ExactlyOnce $settings @'
 [System.IO.File]::WriteAllText($settingsPath, $settings, [System.Text.UTF8Encoding]::new($false))
 
 Write-Host "mGBA audio sharing and core selection prepared." -ForegroundColor Green
+
+
+# Let the ROM loader extract GBA ROMs from ZIP files as well as GB/GBC ROMs.
+$romLoaderPath = Join-Path $vendor "RomFileLoader.cs"
+$romLoader = [System.IO.File]::ReadAllText($romLoaderPath)
+$romLoader = Replace-ExactlyOnce $romLoader '        private static readonly string[] RomExtensions = { ".gb", ".gbc", ".sgb" };' '        private static readonly string[] RomExtensions = { ".gb", ".gbc", ".sgb", ".gba" };' "mGBA ROM extension list"
+$oldGbaReject = @'
+            if (extension.Equals(".gba", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new NotSupportedException(
+                    "This is a Game Boy Advance ROM. The current PocketGB core only emulates Game Boy and Game Boy Color; a separate GBA core such as mGBA is required. The ROM file has not been modified.");
+            }
+
+'@
+if ($romLoader.Contains($oldGbaReject)) {
+    $romLoader = $romLoader.Replace($oldGbaReject, "")
+}
+[System.IO.File]::WriteAllText($romLoaderPath, $romLoader, [System.Text.UTF8Encoding]::new($false))
+
+# Add a routing callback to GameWindow and choose the correct core based on the resolved cartridge type.
+$windowPath = Join-Path $vendor "UI/GameWindow.cs"
+$window = [System.IO.File]::ReadAllText($windowPath)
+$window = Replace-ExactlyOnce $window '        private readonly Toolbar _toolbar;' @'
+        private readonly Toolbar _toolbar;
+        public Action<string>? OpenMgbaGameRequested { get; set; }
+'@ "mGBA game routing callback"
+
+$loadStart = $window.IndexOf("        private void LoadRomFromUi(string path)")
+$loadEnd = $window.IndexOf("        /// <summary>Tracks a smoothed FPS", $loadStart)
+if ($loadStart -lt 0 -or $loadEnd -lt 0 -or $loadEnd -le $loadStart) {
+    throw "Could not locate GameWindow.LoadRomFromUi."
+}
+$newLoadMethod = @'
+        private void LoadRomFromUi(string path)
+        {
+            try
+            {
+                string resolvedPath = RomFileLoader.ResolveRomPath(path);
+                string extension = Path.GetExtension(resolvedPath);
+                bool requiresMgba = extension.Equals(".gba", StringComparison.OrdinalIgnoreCase) ||
+                    _config.General.EmulationBackend == EmulationBackend.Mgba;
+
+                if (requiresMgba)
+                {
+                    if (OpenMgbaGameRequested == null)
+                        throw new InvalidOperationException("The mGBA window is not available in this build.");
+                    OpenMgbaGameRequested(path);
+                    return;
+                }
+
+                _emulator.LoadRom(resolvedPath, path);
+                _config.AddRecentRom(path);
+                ConfigStore.Save(_config);
+                Log.Information("Loaded ROM with GameboySharp: {Path}", path);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Failed to load ROM: {Path}", path);
+            }
+        }
+
+'@
+$window = $window.Substring(0, $loadStart) + $newLoadMethod + $window.Substring($loadEnd)
+[System.IO.File]::WriteAllText($windowPath, $window, [System.Text.UTF8Encoding]::new($false))
+
+# Include the managed adapters and built native DLL in the Windows app publish directory.
+$projectPath = Join-Path $vendor "GameboySharp.csproj"
+$project = [System.IO.File]::ReadAllText($projectPath)
+if (-not $project.Contains("native/mgba/managed/*.cs")) {
+    $items = @'
+  <ItemGroup>
+    <Compile Include="../../native/mgba/managed/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(RuntimeIdentifier)' == 'win-x64'">
+    <Content Include="../../artifacts/native/win-x64/**/*">
+      <Link>%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+'@
+    $project = $project.Replace("</Project>", $items + [Environment]::NewLine + "</Project>")
+}
+[System.IO.File]::WriteAllText($projectPath, $project, [System.Text.UTF8Encoding]::new($false))
+
+Write-Host "GBA ROM loading, core routing and native publish assets prepared." -ForegroundColor Green
