@@ -18,8 +18,6 @@ New-Item -ItemType Directory -Force $outputDirectory | Out-Null
 $configureArgs = @(
     "-S", $cmakeSource,
     "-B", $buildDirectory,
-    "-DMGBA_SOURCE_DIR=$mgbaSource",
-    "-DPGB_NATIVE_OUTPUT_DIR=$outputDirectory",
     "-DCMAKE_BUILD_TYPE=Release",
     "-DLIBMGBA_ONLY=ON",
     "-DM_CORE_GBA=ON",
