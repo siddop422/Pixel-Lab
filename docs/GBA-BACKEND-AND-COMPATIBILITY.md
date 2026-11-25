@@ -4,8 +4,8 @@
 
 PocketGB now includes two real emulation cores on the Windows x64 build:
 
-- **GameboySharp** — the existing managed Game Boy / Game Boy Color core. Auto mode keeps using this for `.gb`, `.gbc`, and `.sgb` cartridges.
-- **mGBA** — the pinned native mGBA core for Game Boy Advance and optional GB/GBC playback. Auto mode routes `.gba` cartridges here.
+- **GameboySharp** — the existing managed Game Boy / Game Boy Color core, retained as a manual fallback.
+- **mGBA** — the pinned native mGBA core for Game Boy Advance, Game Boy and Game Boy Color. Auto mode prefers mGBA for `.gba`, `.gb`, `.gbc`, and `.sgb` cartridges.
 
 The upstream mGBA source is pinned to commit [431935616c0e216d650b25b2ea0c0acccd359038](https://github.com/mgba-emu/mgba/commit/431935616c0e216d650b25b2ea0c0acccd359038). The build uses mGBA's `LIBMGBA_ONLY` core library with its GBA and GB cores enabled. Qt, SDL desktop frontends, debugger UI, and other optional frontends are not shipped. The native DLL is approximately 855 KB in the validated Windows artifact, and the MPL-2.0 licence notice is included in the portable package.
 
@@ -17,7 +17,7 @@ Open **Settings → General → Emulation core**:
 
 | Option | Behaviour |
 | --- | --- |
-| **Auto (recommended)** | `.gba` uses mGBA; `.gb`, `.gbc`, and `.sgb` use GameboySharp |
+| **Auto (recommended)** | `.gba`, `.gb`, `.gbc`, and `.sgb` use mGBA for broader core compatibility |
 | **GameboySharp (GB/GBC)** | Use the original PocketGB Game Boy / Color core for GB/GBC games |
 | **mGBA (GB/GBC/GBA)** | Use mGBA for supported GBA and GB/GBC cartridges |
 
@@ -63,6 +63,7 @@ The Windows CI run [45683839180](https://github.com/siddop422/Pixel-Lab/actions/
 
 - 92 tests passed, 0 failed, 7 skipped (99 total).
 - Includes a generated synthetic GBA cartridge test which loads through the native mGBA adapter, verifies 240×160 output, runs two frames, and saves/restores a state.
+- The latest branch also adds a generated synthetic GB cartridge test which verifies 160×144 output, frame execution, and save-state round-trip through the same mGBA adapter.
 - Native mGBA DLL build, self-contained Windows x64 publish, installer compilation, portable ZIP creation, and checksum generation all passed.
 - The portable ZIP contains `pocketgb-mgba.dll` and the MPL-2.0 notice.
 
