@@ -745,3 +745,6 @@ Write-Host "ZIP games now keep battery saves and save states beside the original
 
 # Apply the optional PocketGB display, shader and graphics diagnostics layer.
 & (Join-Path $PSScriptRoot "Prepare.DisplaySettings.ps1")
+
+# Apply real emulation-speed scheduling, turbo batching and the live FPS overlay.
+& (Join-Path $PSScriptRoot "Prepare.Performance.ps1")
