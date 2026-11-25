@@ -13,8 +13,44 @@ namespace GameboySharp;
 /// </summary>
 internal sealed unsafe class MgbaCore : IDisposable
 {
-    private const string NativeLibrary = "pocketgb-mgba";
+    private const string NativeLibraryName = "pocketgb-mgba";
     private const int MaxAudioFrames = 16384;
+
+
+    static MgbaCore()
+    {
+        System.Runtime.InteropServices.NativeLibrary.SetDllImportResolver(
+            typeof(MgbaCore).Assembly, ResolveNativeLibrary);
+    }
+
+    private static IntPtr ResolveNativeLibrary(
+        string libraryName, System.Reflection.Assembly assembly, DllImportSearchPath? searchPath)
+    {
+        if (!string.Equals(libraryName, NativeLibraryName, StringComparison.OrdinalIgnoreCase))
+            return IntPtr.Zero;
+
+        var candidates = new List<string>();
+        string? explicitPath = Environment.GetEnvironmentVariable("PGB_MGBA_NATIVE_DLL");
+        if (!string.IsNullOrWhiteSpace(explicitPath))
+            candidates.Add(Path.GetFullPath(explicitPath));
+
+        string fileName = NativeLibraryName + (OperatingSystem.IsWindows() ? ".dll" :
+            OperatingSystem.IsMacOS() ? ".dylib" : ".so");
+        string baseDirectory = AppContext.BaseDirectory;
+        candidates.Add(Path.Combine(baseDirectory, fileName));
+        candidates.Add(Path.Combine(baseDirectory, "runtimes", "win-x64", "native", fileName));
+        candidates.Add(Path.Combine(Environment.CurrentDirectory, "artifacts", "native", "win-x64", fileName));
+
+        foreach (string candidate in candidates)
+        {
+            if (File.Exists(candidate) &&
+                System.Runtime.InteropServices.NativeLibrary.TryLoad(candidate, out IntPtr handle))
+                return handle;
+        }
+
+        // Let the platform default loader try its normal search paths as a final fallback.
+        return IntPtr.Zero;
+    }
 
     private readonly EmulatorConfig _config;
     private IntPtr _context;
@@ -448,7 +484,7 @@ internal sealed unsafe class MgbaCore : IDisposable
         _audioSink = null;
     }
 
-    [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(NativeLibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern IntPtr pgb_mgba_create();
 
     [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
