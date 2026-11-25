@@ -128,3 +128,139 @@ $settings = Replace-ExactlyOnce $settings @'
 [System.IO.File]::WriteAllText($settingsPath, $settings, [System.Text.UTF8Encoding]::new($false))
 
 Write-Host "Core frame batching and configurable turbo speed prepared." -ForegroundColor Green
+
+# Add live counters: render FPS is intentionally different from actual emulated game FPS.
+$windowPath = Join-Path $vendor "UI/GameWindow.cs"
+$window = [System.IO.File]::ReadAllText($windowPath)
+if (-not $window.Contains('using System.Diagnostics;')) {
+    $window = Replace-ExactlyOnce $window 'using System;' ('using System;' + [Environment]::NewLine + 'using System.Diagnostics;') "Stopwatch import"
+}
+$window = Replace-ExactlyOnce $window @'
+        private double _fps;
+        private int _titleUpdateCounter;
+
+        // True while the turbo/fast-forward key is held. The main loop reads this to drop frame pacing.
+'@ @'
+        private double _fps;
+        private int _titleUpdateCounter;
+        private double _emulatedFps;
+        private int _emulatedFramesInSample;
+        private readonly Stopwatch _emulationStatsTimer = Stopwatch.StartNew();
+
+        // True while the turbo/fast-forward key is held.
+'@ "emulated FPS fields"
+$window = Replace-ExactlyOnce $window @'
+            _toolbar.Draw(_fps);
+            _fileBrowser.Draw();
+'@ @'
+            _toolbar.Draw(_fps);
+            DrawPerformanceOverlay();
+            _fileBrowser.Draw();
+'@ "performance overlay call"
+$methods = @'
+        public void RecordEmulatedFrames(int frameCount)
+        {
+            if (frameCount <= 0) return;
+            _emulatedFramesInSample += frameCount;
+            double elapsed = _emulationStatsTimer.Elapsed.TotalSeconds;
+            if (elapsed >= 0.5)
+            {
+                double measured = _emulatedFramesInSample / elapsed;
+                _emulatedFps = _emulatedFps <= 0 ? measured : (_emulatedFps * 0.55) + (measured * 0.45);
+                _emulatedFramesInSample = 0;
+                _emulationStatsTimer.Restart();
+            }
+        }
+
+        private void DrawPerformanceOverlay()
+        {
+            var viewport = ImGui.GetMainViewport();
+            ImGui.SetNextWindowPos(new Vector2(viewport.Pos.X + viewport.Size.X - 12f,
+                viewport.Pos.Y + Toolbar.HeightPoints + 8f), ImGuiCond.Always, new Vector2(1f, 0f));
+            ImGui.SetNextWindowBgAlpha(0.78f);
+            const ImGuiWindowFlags flags =
+                ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoMove |
+                ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoSavedSettings |
+                ImGuiWindowFlags.NoFocusOnAppearing | ImGuiWindowFlags.NoNav |
+                ImGuiWindowFlags.NoInputs | ImGuiWindowFlags.AlwaysAutoResize;
+            if (ImGui.Begin("##pocketgb-performance", flags))
+            {
+                ImGui.Text("RENDER  {0:0} FPS", _fps);
+                ImGui.Text("GAME    {0:0.0} FPS", _emulatedFps);
+                double measuredSpeed = _emulatedFps / GameboyConstants.FramesPerSecond;
+                ImGui.TextColored(_turboActive ? new Vector4(0.48f, 0.95f, 0.62f, 1f) :
+                    new Vector4(0.78f, 0.86f, 0.81f, 1f),
+                    _turboActive ? "TURBO  {0:0.00}x" : "SPEED  {0:0.00}x", measuredSpeed);
+            }
+            ImGui.End();
+        }
+
+'@
+if (-not $window.Contains('private void DrawPerformanceOverlay()')) {
+    $window = Replace-ExactlyOnce $window '        public void Dispose()' ($methods + '        public void Dispose()') "performance overlay method"
+}
+$window = Replace-ExactlyOnce $window '                _window.Title = $"{_emulator.CurrentRomName} — {_fps:0} FPS";' '                _window.Title = string.Format("{0} — Render {1:0} FPS | Game {2:0.0} FPS", _emulator.CurrentRomName, _fps, _emulatedFps);' "dual FPS title"
+[System.IO.File]::WriteAllText($windowPath, $window, [System.Text.UTF8Encoding]::new($false))
+
+# Fixed refresh pacing now schedules zero, one, or several emulation frames per draw.
+$programPath = Join-Path $vendor "Program.cs"
+$program = [System.IO.File]::ReadAllText($programPath)
+$loopStart = $program.IndexOf('        Log.Information("Starting main loop...");')
+$loopEnd = $program.IndexOf('        Log.Information("Closing application.");', $loopStart)
+if ($loopStart -lt 0 -or $loopEnd -lt 0 -or $loopEnd -le $loopStart) { throw "Main-loop anchors missing." }
+$loop = @'
+        Log.Information("Starting main loop...");
+        var frameTimer = Stopwatch.StartNew();
+        long previousTimestamp = Stopwatch.GetTimestamp();
+        var framePacer = new EmulationFramePacer();
+        const double presentationFrameMs = 1000.0 / GameboyConstants.FramesPerSecond;
+        int turboRenderCounter = 0;
+
+        while (!gameWindow.SilkWindow.IsClosing && !debugWindow.SilkWindow.IsClosing)
+        {
+            long currentTimestamp = Stopwatch.GetTimestamp();
+            double elapsedSeconds = (currentTimestamp - previousTimestamp) / (double)Stopwatch.Frequency;
+            previousTimestamp = currentTimestamp;
+            frameTimer.Restart();
+
+            gameWindow.SilkWindow.DoEvents();
+            debugWindow.SilkWindow.DoEvents();
+            gameWindow.SilkWindow.DoUpdate();
+
+            bool turbo = gameWindow.TurboActive;
+            double requestedSpeed = turbo ? config.General.TurboSpeedMultiplier : config.General.SpeedMultiplier;
+            int framesToRun = framePacer.Consume(elapsedSeconds, requestedSpeed,
+                GameboyConstants.FramesPerSecond, paused: !emulator.HasRom || emulator.IsPaused);
+
+            if (framesToRun > 0)
+            {
+                emulator.RunFrames(framesToRun);
+                gameWindow.RecordEmulatedFrames(framesToRun);
+            }
+            else
+            {
+                emulator.RunFrames(0);
+            }
+
+            int renderInterval = turbo ? (requestedSpeed >= 8.0 ? 3 : 2) : 1;
+            bool renderNow = !turbo || (++turboRenderCounter % renderInterval == 0);
+            if (renderNow)
+            {
+                gameWindow.SilkWindow.DoRender();
+                if (!turbo && debugWindow.SilkWindow.IsVisible) debugWindow.SilkWindow.DoRender();
+            }
+
+            if (!turbo)
+            {
+                double remainingMs = presentationFrameMs - frameTimer.Elapsed.TotalMilliseconds;
+                int sleepMs = (int)Math.Floor(remainingMs);
+                if (sleepMs > 0) Thread.Sleep(sleepMs);
+                else if (remainingMs > 0) Thread.SpinWait(50);
+            }
+        }
+
+'@
+$program = $program.Substring(0, $loopStart) + $loop + $program.Substring($loopEnd)
+[System.IO.File]::WriteAllText($programPath, $program, [System.Text.UTF8Encoding]::new($false))
+
+Write-Host "Actual turbo frame advancement and on-screen FPS overlay prepared." -ForegroundColor Green
