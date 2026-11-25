@@ -74,6 +74,9 @@ internal sealed unsafe class MgbaCore : IDisposable
     public void LoadRom(string sourcePath)
     {
         ThrowIfDisposed();
+        if (HasRom) SaveBattery();
+        HasRom = false;
+        GameTitle = "(loading)";
         string resolvedPath = RomFileLoader.ResolveRomPath(sourcePath);
         byte[] rom = File.ReadAllBytes(resolvedPath);
 
@@ -166,7 +169,7 @@ internal sealed unsafe class MgbaCore : IDisposable
         if (!HasRom || string.IsNullOrWhiteSpace(_saveStatePath)) return;
 
         nuint size = pgb_mgba_state_size(_context);
-        if (size == 0 || size > 64u * 1024u * 1024u)
+        if (size == 0 || size > (nuint)(64 * 1024 * 1024))
             throw new InvalidOperationException("mGBA returned an invalid save-state size.");
 
         byte[] state = new byte[(int)size];
@@ -213,7 +216,7 @@ internal sealed unsafe class MgbaCore : IDisposable
             return;
 
         nuint size = pgb_mgba_savedata_size(_context);
-        if (size == 0 || size > 16u * 1024u * 1024u)
+        if (size == 0 || size > (nuint)(16 * 1024 * 1024))
         {
             _framesSinceBatterySave = 0;
             return;
