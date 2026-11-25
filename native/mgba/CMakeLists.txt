@@ -2,6 +2,11 @@ cmake_minimum_required(VERSION 3.20)
 
 project(PocketGBMgbaNative LANGUAGES C CXX)
 
+# Link the MSVC C runtime statically so the native DLL does not require a separate VC++ redistributable install.
+if(MSVC)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>" CACHE STRING "" FORCE)
+endif()
+
 # CI checks out mGBA into third_party/mgba at an exact upstream revision.
 if(NOT DEFINED MGBA_SOURCE_DIR OR MGBA_SOURCE_DIR STREQUAL "")
     set(MGBA_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}/../../third_party/mgba")
