@@ -42,9 +42,11 @@ The installer keeps the same application ID and install directory between versio
 | Special ROM size codes 0x52/0x53/0x54 | Header parsing implemented |
 | MBC6, MBC7, MMM01, HuC-1, HuC-3, TAMA5, Pocket Camera | Not implemented yet; the emulator now reports unsupported mapper IDs clearly |
 | Super Game Boy enhancements | Not implemented |
-| Game Boy Advance (.gba) | **Not supported** |
+| Game Boy Advance (.gba) | **Not supported by the current build**. .gba files are detected and report that a separate GBA core is required. |
 
-PocketGB is a Game Boy / Game Boy Color emulator, not a universal handheld emulator. GBA uses different hardware and requires a separate GBA emulation core. A `.gba` file cannot be made compatible by changing its extension or adding it to the file picker. No commercial ROMs or BIOS files are included.
+PocketGB is a Game Boy / Game Boy Color emulator, not a universal handheld emulator.
+
+GBA backend work is tracked in [GBA-BACKEND-AND-COMPATIBILITY.md](docs/GBA-BACKEND-AND-COMPATIBILITY.md). The recommended implementation is a native mGBA core adapter, not a fake backend toggle. The current build still cannot run .gba files. GBA uses different hardware and requires a separate GBA emulation core. A `.gba` file cannot be made compatible by changing its extension or adding it to the file picker. No commercial ROMs or BIOS files are included.
 
 “Supported” means the core has an implementation for the listed system/controller; it is not a claim that every commercial or homebrew ROM has been individually tested. The repository's automated tests cover core components and cartridge parsing, but do not establish a 100% compatibility rate. Please report a reproducible issue with the ROM title and mapper information when a game fails.
 
@@ -102,6 +104,8 @@ Keyboard and gamepad bindings can be changed in Settings.
 - The application bundles its .NET runtime and native application dependencies; a separate .NET install is not required.
 - A recent Intel, AMD, or NVIDIA graphics driver is recommended.
 - On low-end hardware, use the Low-end / maximum performance preset, pixel-perfect scaling, and keep CRT/LCD effects and temporal blending disabled.
+
+Normal speed is a true emulation multiplier (0.5x / 1x / 2x), not just a render-loop delay. Holding Tab advances multiple emulated frames per presentation interval; choose the turbo multiplier (2x–16x) in Settings → General. The corner overlay reports **RENDER FPS** separately from **GAME FPS** and measured emulation speed, so a higher render counter is not mistaken for faster gameplay.
 
 The core renders at the Game Boy's native frame rate. The FPS counter measures application presentation/rendering and can vary with window composition, GPU drivers, V-Sync, and system load.
 
