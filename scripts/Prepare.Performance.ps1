@@ -199,7 +199,7 @@ $methods = @'
 if (-not $window.Contains('private void DrawPerformanceOverlay()')) {
     $window = Replace-ExactlyOnce $window '        public void Dispose()' ($methods + '        public void Dispose()') "performance overlay method"
 }
-$window = Replace-ExactlyOnce $window '                _window.Title = $"{_emulator.CurrentRomName} — {_fps:0} FPS";' '                _window.Title = string.Format("{0} — Render {1:0} FPS | Game {2:0.0} FPS", _emulator.CurrentRomName, _fps, _emulatedFps);' "dual FPS title"
+$window = Replace-ExactlyOnce $window '                _window.Title = $"PocketGB — {_emulator.CurrentRomName} — {_fps:0} FPS";' '                _window.Title = string.Format("{0} — Render {1:0} FPS | Game {2:0.0} FPS", _emulator.CurrentRomName, _fps, _emulatedFps);' "dual FPS title"
 [System.IO.File]::WriteAllText($windowPath, $window, [System.Text.UTF8Encoding]::new($false))
 
 # Fixed refresh pacing now schedules zero, one, or several emulation frames per draw.
