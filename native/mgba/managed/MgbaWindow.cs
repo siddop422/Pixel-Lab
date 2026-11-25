@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Numerics;
 using ImGuiNET;
+using Serilog;
 using Silk.NET.Input;
 using Silk.NET.Maths;
 using Silk.NET.OpenGL;
@@ -39,7 +40,6 @@ internal sealed class MgbaWindow : IDisposable
     private int _titleRefresh;
     private readonly Stopwatch _gameFpsTimer = Stopwatch.StartNew();
     private string _lastError = "";
-    private bool _showAbout;
 
     public IWindow SilkWindow => _window;
     public bool HasRom => _core.HasRom;
@@ -165,8 +165,8 @@ internal sealed class MgbaWindow : IDisposable
         if (IsDown(Key.Left, keyboard) || IsGamepadDown(ButtonName.DPadLeft, gamepad)) keys |= 1u << 5;
         if (IsDown(Key.Up, keyboard) || IsGamepadDown(ButtonName.DPadUp, gamepad)) keys |= 1u << 6;
         if (IsDown(Key.Down, keyboard) || IsGamepadDown(ButtonName.DPadDown, gamepad)) keys |= 1u << 7;
-        if (IsDown(Key.S, keyboard) || IsGamepadDown(ButtonName.RightShoulder, gamepad)) keys |= 1u << 8; // R
-        if (IsDown(Key.A, keyboard) || IsGamepadDown(ButtonName.LeftShoulder, gamepad)) keys |= 1u << 9; // L
+        if (IsDown(Key.S, keyboard) || IsGamepadShoulder(right: true, gamepad)) keys |= 1u << 8; // R
+        if (IsDown(Key.A, keyboard) || IsGamepadShoulder(right: false, gamepad)) keys |= 1u << 9; // L
         _core.SetKeys(keys);
 
         _turboActive = IsDown(Key.Tab, keyboard);
@@ -186,6 +186,23 @@ internal sealed class MgbaWindow : IDisposable
         if (gamepad == null) return false;
         foreach (Button button in gamepad.Buttons)
             if (button.Name == name && button.Pressed) return true;
+        return false;
+    }
+
+    private static bool IsGamepadShoulder(bool right, IGamepad? gamepad)
+    {
+        if (gamepad == null) return false;
+        foreach (Button button in gamepad.Buttons)
+        {
+            if (!button.Pressed) continue;
+            string name = button.Name.ToString();
+            bool sideMatches = right
+                ? name.Contains("Right", StringComparison.OrdinalIgnoreCase)
+                : name.Contains("Left", StringComparison.OrdinalIgnoreCase);
+            bool shoulder = name.Contains("Shoulder", StringComparison.OrdinalIgnoreCase) ||
+                name.Contains("Trigger", StringComparison.OrdinalIgnoreCase);
+            if (sideMatches && shoulder) return true;
+        }
         return false;
     }
 
