@@ -227,3 +227,199 @@ if (-not $project.Contains("native/mgba/managed/*.cs")) {
 [System.IO.File]::WriteAllText($projectPath, $project, [System.Text.UTF8Encoding]::new($false))
 
 Write-Host "GBA ROM loading, core routing and native publish assets prepared." -ForegroundColor Green
+
+
+# Route command-line .gba files to mGBA instead of asking the Game Boy-only core to parse them.
+$programPath = Join-Path $vendor "Program.cs"
+$program = [System.IO.File]::ReadAllText($programPath)
+$startupStart = $program.IndexOf("        if (args.Length > 0)")
+$startupEnd = $program.IndexOf('        Log.Information("Creating windows...");', $startupStart)
+if ($startupStart -lt 0 -or $startupEnd -lt 0 -or $startupEnd -le $startupStart) {
+    throw "Could not find Program.cs startup game-loading block."
+}
+$startupBlock = @'
+        string? mgbaStartupRom = null;
+        if (args.Length > 0)
+        {
+            try
+            {
+                string resolvedPath = RomFileLoader.ResolveRomPath(args[0]);
+                bool useMgba = Path.GetExtension(resolvedPath).Equals(".gba", StringComparison.OrdinalIgnoreCase) ||
+                    config.General.EmulationBackend == EmulationBackend.Mgba;
+                if (useMgba) mgbaStartupRom = args[0];
+                else emulator.LoadRom(resolvedPath, args[0]);
+                config.AddRecentRom(args[0]);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Failed to load game file at '{Path}'. Open another game from the toolbar.", args[0]);
+            }
+        }
+
+'@
+$program = $program.Substring(0, $startupStart) + $startupBlock + $program.Substring($startupEnd)
+
+# Create the optional mGBA window lazily. Closing it returns to the existing GameboySharp window.
+$windowAnchor = @'
+        using var gameWindow = new GameWindow(emulator, config);
+        using var debugWindow = new DebugWindow(emulator);
+
+'@
+$windowReplacement = @'
+        using var gameWindow = new GameWindow(emulator, config);
+        using var debugWindow = new DebugWindow(emulator);
+        MgbaWindow? mgbaWindow = null;
+        var framePacer = new EmulationFramePacer();
+        bool shuttingDown = false;
+
+        void ReturnToGameboySharp()
+        {
+            if (shuttingDown) return;
+            framePacer.Reset();
+            gameWindow.SilkWindow.IsVisible = true;
+            debugWindow.SilkWindow.IsVisible = false;
+        }
+
+        void OpenMgbaGame(string path)
+        {
+            try
+            {
+                if (mgbaWindow == null || mgbaWindow.IsClosing)
+                {
+                    mgbaWindow?.Dispose();
+                    mgbaWindow = new MgbaWindow(config, ReturnToGameboySharp);
+                }
+
+                mgbaWindow.LoadRom(path);
+                framePacer.Reset();
+                gameWindow.SilkWindow.IsVisible = false;
+                debugWindow.SilkWindow.IsVisible = false;
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Could not open the mGBA backend for {Path}", path);
+                ReturnToGameboySharp();
+            }
+        }
+
+        gameWindow.OpenMgbaGameRequested = OpenMgbaGame;
+        if (mgbaStartupRom != null) OpenMgbaGame(mgbaStartupRom);
+
+'@
+$program = Replace-ExactlyOnce $program $windowAnchor $windowReplacement "mGBA window initialization"
+
+$oldShutdown = @'
+        bool shuttingDown = false;
+        void ShutDownBothWindows()
+        {
+            if (shuttingDown) return;
+            shuttingDown = true;
+            gameWindow.SilkWindow.Close();
+            debugWindow.SilkWindow.Close();
+        }
+'@
+$newShutdown = @'
+        void ShutDownBothWindows()
+        {
+            if (shuttingDown) return;
+            shuttingDown = true;
+            if (mgbaWindow != null && !mgbaWindow.IsClosing)
+                mgbaWindow.SilkWindow.Close();
+            gameWindow.SilkWindow.Close();
+            debugWindow.SilkWindow.Close();
+        }
+'@
+$program = Replace-ExactlyOnce $program $oldShutdown $newShutdown "mGBA shutdown callback"
+
+# One scheduler services either core, using that core's native frame rate and pause state.
+$loopStart = $program.IndexOf('        Log.Information("Starting main loop...");')
+$loopEnd = $program.IndexOf('        Log.Information("Closing PocketGB.");', $loopStart)
+if ($loopStart -lt 0 -or $loopEnd -lt 0 -or $loopEnd -le $loopStart) {
+    throw "Could not find Program.cs main-loop boundaries."
+}
+
+$loop = @'
+        Log.Information("Starting main loop...");
+        var frameTimer = Stopwatch.StartNew();
+        long previousTimestamp = Stopwatch.GetTimestamp();
+        const double presentationFrameMs = 1000.0 / GameboyConstants.FramesPerSecond;
+        int turboRenderCounter = 0;
+
+        while (!gameWindow.SilkWindow.IsClosing && !debugWindow.SilkWindow.IsClosing)
+        {
+            if (mgbaWindow != null && mgbaWindow.IsClosing)
+            {
+                mgbaWindow.Dispose();
+                mgbaWindow = null;
+                framePacer.Reset();
+            }
+
+            long currentTimestamp = Stopwatch.GetTimestamp();
+            double elapsedSeconds = (currentTimestamp - previousTimestamp) / (double)Stopwatch.Frequency;
+            previousTimestamp = currentTimestamp;
+            frameTimer.Restart();
+
+            gameWindow.SilkWindow.DoEvents();
+            debugWindow.SilkWindow.DoEvents();
+
+            bool useMgba = mgbaWindow != null && !mgbaWindow.IsClosing;
+            if (useMgba)
+            {
+                mgbaWindow!.SilkWindow.DoEvents();
+                mgbaWindow.SilkWindow.DoUpdate();
+            }
+            else
+            {
+                gameWindow.SilkWindow.DoUpdate();
+            }
+
+            bool turbo = useMgba ? mgbaWindow!.TurboActive : gameWindow.TurboActive;
+            double requestedSpeed = turbo ? config.General.TurboSpeedMultiplier : config.General.SpeedMultiplier;
+            double gameFrameRate = useMgba ? mgbaWindow!.NominalFrameRate : GameboyConstants.FramesPerSecond;
+            bool paused = useMgba
+                ? !mgbaWindow!.HasRom || mgbaWindow.IsPaused
+                : !emulator.HasRom || emulator.IsPaused;
+
+            int framesToRun = framePacer.Consume(elapsedSeconds, requestedSpeed, gameFrameRate, paused);
+
+            if (useMgba)
+            {
+                mgbaWindow!.RunFrames(framesToRun);
+                mgbaWindow.RecordEmulatedFrames(framesToRun);
+            }
+            else
+            {
+                emulator.RunFrames(framesToRun);
+                gameWindow.RecordEmulatedFrames(framesToRun);
+            }
+
+            int renderInterval = turbo ? (requestedSpeed >= 8.0 ? 3 : 2) : 1;
+            bool renderNow = !turbo || (++turboRenderCounter % renderInterval == 0);
+            if (renderNow)
+            {
+                if (useMgba)
+                    mgbaWindow!.SilkWindow.DoRender();
+                else
+                {
+                    gameWindow.SilkWindow.DoRender();
+                    if (debugWindow.SilkWindow.IsVisible)
+                        debugWindow.SilkWindow.DoRender();
+                }
+            }
+
+            if (!turbo && !config.Video.VSync)
+            {
+                double remainingMs = presentationFrameMs - frameTimer.Elapsed.TotalMilliseconds;
+                int sleepMs = (int)Math.Floor(remainingMs);
+                if (sleepMs > 0) Thread.Sleep(sleepMs);
+                else if (remainingMs > 0) Thread.SpinWait(50);
+            }
+        }
+
+        mgbaWindow?.Dispose();
+'@
+
+$program = $program.Substring(0, $loopStart) + $loop + $program.Substring($loopEnd)
+[System.IO.File]::WriteAllText($programPath, $program, [System.Text.UTF8Encoding]::new($false))
+
+Write-Host "mGBA command-line routing and unified GB/GBA frame scheduler prepared." -ForegroundColor Green
