@@ -529,7 +529,7 @@ public class Program
 
             // Normal mode keeps the display near the native refresh cadence. The scheduler
             // changes emulated frames per presentation tick; turbo removes the host wait.
-            if (!turbo)
+            if (!turbo && !config.Video.VSync)
             {
                 double remainingMs = presentationFrameMs - frameTimer.Elapsed.TotalMilliseconds;
                 int sleepMs = (int)Math.Floor(remainingMs);
