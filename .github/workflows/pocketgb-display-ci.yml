@@ -44,6 +44,7 @@ jobs:
       - name: Run tests
         env:
           GBSHARP_AUDIO: none
+          PGB_MGBA_NATIVE_DLL: ${{ github.workspace }}/artifacts/native/win-x64/pocketgb-mgba.dll
         shell: pwsh
         run: dotnet test ./vendor/GameboySharp/GameboySharp.sln -c Release
 
