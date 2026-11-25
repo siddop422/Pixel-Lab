@@ -728,16 +728,7 @@ void main()
 [System.IO.File]::WriteAllText($shaderPath, $fragmentShader, [System.Text.UTF8Encoding]::new($false))
 
 
-# When V-Sync is enabled, let the swap interval pace presentation instead of sleeping a second time.
-$programPath = Join-Path $vendor "Program.cs"
-if (Test-Path $programPath) {
-    $program = [System.IO.File]::ReadAllText($programPath)
-    $program = Replace-ExactlyOnce $program '            if (gameWindow.TurboActive)' @'
-            if (gameWindow.TurboActive || config.Video.VSync)
-'@ "V-Sync frame pacing"
-    [System.IO.File]::WriteAllText($programPath, $program, [System.Text.UTF8Encoding]::new($false))
-}
-
+# V-Sync is handled directly by the generated frame scheduler in Prepare.ps1.
 
 # Broaden standard cartridge handling and reject mapper fallbacks that would corrupt gameplay.
 $mmuPath = Join-Path $vendor "Core/Mmu.cs"

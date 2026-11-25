@@ -479,55 +479,65 @@ public class Program
         debugWindow.SilkWindow.Closing += ShutDownBothWindows;
 
         Log.Information("Starting main loop...");
-        long nextFrameDeadline = Stopwatch.GetTimestamp();
+        var frameTimer = Stopwatch.StartNew();
+        long previousTimestamp = Stopwatch.GetTimestamp();
+        var framePacer = new EmulationFramePacer();
+        const double presentationFrameMs = 1000.0 / GameboyConstants.FramesPerSecond;
+        int turboRenderCounter = 0;
 
         while (!gameWindow.SilkWindow.IsClosing && !debugWindow.SilkWindow.IsClosing)
         {
+            long currentTimestamp = Stopwatch.GetTimestamp();
+            double elapsedSeconds = (currentTimestamp - previousTimestamp) / (double)Stopwatch.Frequency;
+            previousTimestamp = currentTimestamp;
+            frameTimer.Restart();
+
+            // Always process input before scheduling the next group of emulated frames.
             gameWindow.SilkWindow.DoEvents();
             debugWindow.SilkWindow.DoEvents();
-
             gameWindow.SilkWindow.DoUpdate();
-            emulator.RunFrame();
 
-            // The debug view uploads many tile textures. Keep it completely out of the hot path
-            // while hidden; only ask Silk to render it when the user has opened it.
-            gameWindow.SilkWindow.DoRender();
-            if (debugWindow.SilkWindow.IsVisible)
-                debugWindow.SilkWindow.DoRender();
+            bool turbo = gameWindow.TurboActive;
+            double requestedSpeed = turbo ? config.General.TurboSpeedMultiplier : config.General.SpeedMultiplier;
+            int framesToRun = framePacer.Consume(
+                elapsedSeconds,
+                requestedSpeed,
+                GameboyConstants.FramesPerSecond,
+                paused: !emulator.HasRom || emulator.IsPaused);
 
-            if (gameWindow.TurboActive)
+            if (framesToRun > 0)
             {
-                // Do not carry a stale normal-speed deadline into fast-forward mode.
-                nextFrameDeadline = Stopwatch.GetTimestamp();
-                continue;
+                emulator.RunFrames(framesToRun);
+                gameWindow.RecordEmulatedFrames(framesToRun);
+            }
+            else
+            {
+                // Keep audio serviced while paused or during half-speed fractional intervals.
+                emulator.RunFrames(0);
             }
 
-            double speed = Math.Max(0.1, config.General.SpeedMultiplier);
-            long frameInterval = Math.Max(1L, (long)Math.Round(
-                Stopwatch.Frequency / (GameboyConstants.FramesPerSecond * speed)));
-
-            nextFrameDeadline += frameInterval;
-            long now = Stopwatch.GetTimestamp();
-
-            // If the machine fell several frames behind, drop the stale deadline rather than trying
-            // to execute a burst of catch-up frames that makes input and audio feel worse.
-            if (now - nextFrameDeadline > frameInterval * 3L)
+            // During turbo, reduce GL/UI presentation work so the CPU can spend more time
+            // executing actual emulated frames. Render FPS is reported separately from game FPS.
+            int renderInterval = turbo ? (requestedSpeed >= 8.0 ? 3 : 2) : 1;
+            bool renderNow = !turbo || (++turboRenderCounter % renderInterval == 0);
+            if (renderNow)
             {
-                nextFrameDeadline = now;
+                gameWindow.SilkWindow.DoRender();
+                if (!turbo && debugWindow.SilkWindow.IsVisible)
+                    debugWindow.SilkWindow.DoRender();
             }
 
-            long remaining = nextFrameDeadline - now;
-            if (remaining > Stopwatch.Frequency / 1000)
+            // Normal mode keeps the display near the native refresh cadence. The scheduler
+            // changes emulated frames per presentation tick; turbo removes the host wait.
+            if (!turbo && !config.Video.VSync)
             {
-                double remainingMs = remaining * 1000.0 / Stopwatch.Frequency;
-                int coarseSleepMs = (int)Math.Floor(remainingMs - 1.0);
-                if (coarseSleepMs > 0)
-                    Thread.Sleep(coarseSleepMs);
+                double remainingMs = presentationFrameMs - frameTimer.Elapsed.TotalMilliseconds;
+                int sleepMs = (int)Math.Floor(remainingMs);
+                if (sleepMs > 0)
+                    Thread.Sleep(sleepMs);
+                else if (remainingMs > 0)
+                    Thread.SpinWait(50);
             }
-
-            // Only the final millisecond is a short spin; the rest of each frame is sleep-paced.
-            while ((remaining = nextFrameDeadline - Stopwatch.GetTimestamp()) > 0)
-                Thread.SpinWait(8);
         }
 
         Log.Information("Closing PocketGB.");
@@ -745,3 +755,6 @@ Write-Host "ZIP games now keep battery saves and save states beside the original
 
 # Apply the optional PocketGB display, shader and graphics diagnostics layer.
 & (Join-Path $PSScriptRoot "Prepare.DisplaySettings.ps1")
+
+# Apply real emulation-speed scheduling, turbo batching and the live FPS overlay.
+& (Join-Path $PSScriptRoot "Prepare.Performance.ps1")
