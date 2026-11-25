@@ -59,12 +59,12 @@ The Windows x64 build includes `pocketgb-mgba.dll`, the native build manifest, a
 
 ## Validation
 
-The Windows CI run [45683839180](https://github.com/siddop422/Pixel-Lab/actions/runs/45683839180) completed successfully:
+The post-merge `main` Windows CI run [45692523818](https://github.com/siddop422/Pixel-Lab/actions/runs/45692523818) completed successfully:
 
-- 92 tests passed, 0 failed, 7 skipped (99 total).
-- Includes a generated synthetic GBA cartridge test which loads through the native mGBA adapter, verifies 240×160 output, runs two frames, and saves/restores a state.
-- The latest branch also adds a generated synthetic GB cartridge test which verifies 160×144 output, frame execution, and save-state round-trip through the same mGBA adapter.
-- Native mGBA DLL build, self-contained Windows x64 publish, installer compilation, portable ZIP creation, and checksum generation all passed.
+- **93 tests passed, 0 failed, 7 skipped (100 total).**
+- A generated synthetic GBA cartridge loads through the native mGBA adapter, runs two frames, verifies the 240×160 framebuffer, and completes a save-state round-trip.
+- A generated synthetic GB cartridge loads through the same adapter, runs two frames, verifies the 160×144 framebuffer, and completes a save-state round-trip.
+- Native mGBA DLL build, self-contained Windows x64 publish, Inno Setup installer, portable ZIP, and SHA-256 checksum generation all passed on `main`.
 - The portable ZIP contains `pocketgb-mgba.dll` and the MPL-2.0 notice.
 
 The seven skipped tests need optional external Game Boy ROM or CPU-vector datasets which are not bundled with the repository.

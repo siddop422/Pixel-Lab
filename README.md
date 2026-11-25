@@ -6,7 +6,7 @@ PocketGB is a lightweight Windows desktop emulator for Nintendo Game Boy, Game B
 
 ## Latest Windows build
 
-The official release page is [PocketGB GitHub Releases](https://github.com/siddop422/Pixel-Lab/releases). The next release, **PocketGB 1.3.0**, adds the native mGBA GBA backend; the existing public 1.2.0 installer does not yet contain that backend.
+The current release is **PocketGB 1.3.0**. Download the [Windows installer](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.3.0/PocketGB-Setup-1.3.0.exe), [portable ZIP](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.3.0/PocketGB-Portable-1.3.0.zip), or [SHA256SUMS.txt](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.3.0/SHA256SUMS.txt). See [all PocketGB releases](https://github.com/siddop422/Pixel-Lab/releases).
 
 | Download | What it is |
 | --- | --- |
@@ -20,9 +20,9 @@ The installer retains the same application ID and install folder, so running a n
 
 ## What's new in 1.3.0
 
-- Native mGBA core for Game Boy Advance and optional GB/GBC playback on Windows x64.
+- Native mGBA core for Game Boy Advance, Game Boy and Game Boy Color on Windows x64.
 - Emulation core selector: Auto, GameboySharp (GB/GBC), and mGBA (GB/GBC/GBA).
-- Auto routes `.gba`, `.gb`, `.gbc`, and `.sgb` files to mGBA for broader compatibility.
+- Auto prefers mGBA for `.gba`, `.gb`, `.gbc`, and `.sgb` files for broader compatibility; GameboySharp remains a selectable manual GB/GBC fallback.
 - GBA output at 240×160 with dynamic aspect-ratio scaling; GB/GBC output remains 160×144.
 - mGBA input mapping for GBA controls, stereo audio, battery saves, reset, and quick save/load state.
 - Real frame-based speed multipliers and configurable Tab turbo (2×–16×); faster render FPS is shown separately from actual emulated game FPS.
@@ -34,7 +34,7 @@ The installer retains the same application ID and install folder, so running a n
 | System / cartridge | Status |
 | --- | --- |
 | Original Game Boy (DMG) | GameboySharp core |
-| Game Boy Color (CGB) | GameboySharp by default; mGBA selectable |
+| Game Boy Color (CGB) | mGBA in Auto mode; GameboySharp selectable as fallback |
 | Game Boy Advance (GBA) | mGBA native core in the Windows x64 build |
 | Standard ROM-only, MBC1, MBC2, MBC3, and MBC5 | Implemented by GameboySharp |
 | Standard ROM+RAM and ROM+RAM+battery (0x08/0x09) | Implemented by GameboySharp |
