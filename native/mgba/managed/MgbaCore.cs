@@ -11,7 +11,7 @@ namespace GameboySharp;
 /// for Windows x64 at present; the existing GameboySharp GB/GBC core remains usable
 /// on platforms where the DLL is not installed.
 /// </summary>
-internal sealed class MgbaCore : IDisposable
+internal sealed unsafe class MgbaCore : IDisposable
 {
     private const string NativeLibrary = "pocketgb-mgba";
     private const int MaxAudioFrames = 16384;
@@ -284,7 +284,11 @@ internal sealed class MgbaCore : IDisposable
     {
         IntPtr pixels = pgb_mgba_video_pixels(_context);
         if (pixels == IntPtr.Zero) throw new InvalidOperationException("mGBA returned an empty video buffer.");
-        Marshal.Copy(pixels, (int[])(object)_frameBuffer, 0, _frameBuffer.Length);
+        fixed (uint* destination = _frameBuffer)
+        {
+            long byteCount = (long)_frameBuffer.Length * sizeof(uint);
+            Buffer.MemoryCopy(pixels.ToPointer(), destination, byteCount, byteCount);
+        }
     }
 
     private string GetNativeText(NativeTextGetter getter)
@@ -398,17 +402,15 @@ internal sealed class MgbaCore : IDisposable
 
         if (outputFrames > 0)
         {
-            if (outputFrames == _outputLeft.Length)
+            if (_audioSink is IAudioSinkWithCount lengthAware)
+                lengthAware.Submit(_outputLeft, _outputRight, outputFrames);
+            else
             {
-                // An unusually high native audio rate hit the reusable buffer cap: submit this
-                // block rather than allocating an unbounded buffer on the emulation thread.
-                _audioSink.Submit(_outputLeft, _outputRight);
-                return;
+                // Fallback for a non-PocketGB audio sink that has not implemented the length-aware path.
+                short[] left = _outputLeft.AsSpan(0, outputFrames).ToArray();
+                short[] right = _outputRight.AsSpan(0, outputFrames).ToArray();
+                _audioSink.Submit(left, right);
             }
-
-            short[] left = outputFrames == _outputLeft.Length ? _outputLeft : _outputLeft[..outputFrames];
-            short[] right = outputFrames == _outputRight.Length ? _outputRight : _outputRight[..outputFrames];
-            _audioSink.Submit(left, right);
         }
     }
 
