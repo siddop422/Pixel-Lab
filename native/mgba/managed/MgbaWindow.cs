@@ -64,7 +64,7 @@ internal sealed class MgbaWindow : IDisposable
         _gl = _window.CreateOpenGL();
         _input = _window.CreateInput();
         _imgui = new ImGuiController(_gl, _window, _input);
-        _renderer = new MgbaFrameRenderer(_gl);
+        _renderer = new MgbaFrameRenderer(_gl, config.Video.UpscaleMode != VideoUpscaleMode.PixelPerfect);
         _core = new MgbaCore(config);
 
         string? startDirectory = config.RecentRoms.Count > 0
@@ -106,7 +106,7 @@ internal sealed class MgbaWindow : IDisposable
 
     public void RunFrames(int frames)
     {
-        if (_disposed || frames <= 0) return;
+        if (_disposed) return;
         _core.Muted = _config.Audio.Muted || (_turboActive && _config.General.MuteDuringTurbo);
         _core.RunFrames(frames);
     }
@@ -395,6 +395,7 @@ internal sealed class MgbaWindow : IDisposable
         private uint _texture;
         private int _textureWidth;
         private int _textureHeight;
+        private readonly bool _linearFilter;
 
         private static readonly float[] Vertices =
         {
@@ -423,9 +424,10 @@ void main()
     FragColor = texture(uScreen, vTexCoord);
 }";
 
-        public MgbaFrameRenderer(GL gl)
+        public MgbaFrameRenderer(GL gl, bool linearFilter)
         {
             _gl = gl;
+            _linearFilter = linearFilter;
             Initialize();
         }
 
@@ -464,16 +466,14 @@ void main()
             _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT,
                 (int)TextureWrapMode.ClampToEdge);
             _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter,
-                (int)(_configLinearFilter() ? TextureMinFilter.Linear : TextureMinFilter.Nearest));
+                (int)(_linearFilter ? TextureMinFilter.Linear : TextureMinFilter.Nearest));
             _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter,
-                (int)(_configLinearFilter() ? TextureMagFilter.Linear : TextureMagFilter.Nearest));
+                (int)(_linearFilter ? TextureMagFilter.Linear : TextureMagFilter.Nearest));
             _gl.TexImage2D(TextureTarget.Texture2D, 0, InternalFormat.Rgba, 160, 144, 0,
                 PixelFormat.Rgba, PixelType.UnsignedByte, null);
             _textureWidth = 160;
             _textureHeight = 144;
         }
-
-        private bool _configLinearFilter() => false; // Pixel-perfect default; no extra shader passes.
 
         public void Render(uint[] pixels, int width, int height)
         {
