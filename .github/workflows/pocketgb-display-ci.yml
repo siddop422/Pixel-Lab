@@ -109,7 +109,7 @@ jobs:
             PocketGB 1.3.0 — the latest Windows x64 build.
 
             Downloads:
-            - **PocketGB-Setup-1.3.0.exe** — self-contained per-user installer. It keeps the existing PocketGB application ID and install location so installing 1.3.0 upgrades the existing 1.1.0 install.
+            - **PocketGB-Setup-1.3.0.exe** — self-contained per-user installer. It keeps the existing PocketGB application ID and install location so installing 1.3.0 upgrades the existing 1.2.0 install.
             - **PocketGB-Portable-1.3.0.zip** — self-contained portable Windows build.
             - **SHA256SUMS.txt** — SHA-256 checksums for both downloads.
 
@@ -121,9 +121,9 @@ jobs:
             - Temporal frame blending is an experimental visual blend, not motion-vector frame generation or FPS doubling.
 
             Compatibility:
-            - Game Boy and Game Boy Color core.
-            - ROM-only, MBC1, MBC2, MBC3, MBC5, standard ROM+RAM and ROM+RAM+battery implementations.
-            - Special ROM-size header codes 0x52, 0x53 and 0x54 are handled.
-            - Some uncommon cartridge mappers are not implemented and are reported clearly. Game Boy Advance is not supported by this build.
+            - Native mGBA core for Game Boy Advance, Game Boy and Game Boy Color; Auto prefers mGBA for .gba/.gb/.gbc/.sgb.
+            - GameboySharp remains selectable as a manual GB/GBC fallback with its existing save-state and debugger tools.
+            - mGBA supports a broad set of common and uncommon GBA/GB cartridge types, but compatibility is not guaranteed for every game, mapper, peripheral or ROM hack.
+            - Special GameboySharp ROM-size header codes 0x52, 0x53 and 0x54 remain handled.
 
             Automated tests, the self-contained Windows publish, and Inno Setup compilation must all pass before release creation. The installer is not Authenticode-signed; use the checksums to verify file integrity and download only from this official GitHub release.
