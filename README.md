@@ -22,7 +22,7 @@ The installer retains the same application ID and install folder, so running a n
 
 - Native mGBA core for Game Boy Advance and optional GB/GBC playback on Windows x64.
 - Emulation core selector: Auto, GameboySharp (GB/GBC), and mGBA (GB/GBC/GBA).
-- Auto routes `.gba` files to mGBA and keeps `.gb`, `.gbc`, and `.sgb` on GameboySharp.
+- Auto routes `.gba`, `.gb`, `.gbc`, and `.sgb` files to mGBA for broader compatibility.
 - GBA output at 240×160 with dynamic aspect-ratio scaling; GB/GBC output remains 160×144.
 - mGBA input mapping for GBA controls, stereo audio, battery saves, reset, and quick save/load state.
 - Real frame-based speed multipliers and configurable Tab turbo (2×–16×); faster render FPS is shown separately from actual emulated game FPS.
@@ -42,7 +42,7 @@ The installer retains the same application ID and install folder, so running a n
 | MBC6, MBC7, MMM01, HuC-1, HuC-3, TAMA5, Pocket Camera | Not implemented in GameboySharp; uncommon cartridge types are reported clearly |
 | Super Game Boy enhancements | Not implemented |
 
-mGBA broadens GBA and GB/GBC compatibility, but no emulator can guarantee every game, peripheral, mapper, or ROM hack works perfectly. The automated suite includes a generated GBA cartridge smoke test; the uploaded Balatro GBA ROM has not been run in CI. Its local header check matches the GBA marker bytes recognised by mGBA.
+mGBA is the recommended Auto core for GBA and GB/GBC because it supports a broader set of cartridge types; GameboySharp remains available as a manual GB/GBC fallback. No emulator can guarantee every game, peripheral, mapper, or ROM hack works perfectly. The automated suite includes generated native GBA and GB cartridge smoke tests; the uploaded Balatro GBA ROM and the Geometry Dash GB ROM have not been run in CI. Its local header check matches the GBA marker bytes recognised by mGBA.
 
 No commercial ROMs or BIOS files are included. mGBA's HLE BIOS is used by default.
 
@@ -52,11 +52,11 @@ Open **Settings → General → Emulation core**:
 
 | Option | Behaviour |
 | --- | --- |
-| **Auto (recommended)** | Uses mGBA for `.gba` and GameboySharp for GB/GBC/SGB |
+| **Auto (recommended)** | Prefers mGBA for `.gba`, `.gb`, `.gbc`, and `.sgb` for broader cartridge compatibility |
 | **GameboySharp (GB/GBC)** | Uses the original Game Boy / Color core |
 | **mGBA (GB/GBC/GBA)** | Uses the native mGBA core for supported GBA and GB/GBC images |
 
-The GBA core is a separate native library built from pinned upstream mGBA source. It is not a GameboySharp extension or a file-extension trick.
+The mGBA core is a separate native library built from pinned upstream mGBA source. Auto uses it for all supported handheld ROM types; choose GameboySharp manually when you need the original GB/GBC core and its debugger/save-state features. mGBA is not a GameboySharp extension or a file-extension trick.
 
 ## Display and graphics
 
