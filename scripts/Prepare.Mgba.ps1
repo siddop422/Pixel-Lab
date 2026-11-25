@@ -1,0 +1,562 @@
+$ErrorActionPreference = "Stop"
+$root = Split-Path -Parent $PSScriptRoot
+$vendor = Join-Path $root "vendor/GameboySharp"
+
+function Replace-ExactlyOnce([string]$Source, [string]$Old, [string]$New, [string]$Label) {
+    $count = ([regex]::Matches($Source, [regex]::Escape($Old))).Count
+    if ($count -ne 1) { throw "Expected one $Label anchor, found $count." }
+    return $Source.Replace($Old, $New)
+}
+
+# Share the existing SDL/OpenAL audio factory with the mGBA adapter.
+$emulatorPath = Join-Path $vendor "Emulator.cs"
+$emulator = [System.IO.File]::ReadAllText($emulatorPath)
+$emulator = Replace-ExactlyOnce $emulator '        private static IAudioSink CreateAudioSink(AudioBackend backend)' '        internal static IAudioSink CreateAudioSink(AudioBackend backend)' "shared audio factory"
+[System.IO.File]::WriteAllText($emulatorPath, $emulator, [System.Text.UTF8Encoding]::new($false))
+
+# Add a length-aware fast path to avoid allocating slices of audio arrays every frame.
+$sdlPath = Join-Path $vendor "Sound/SdlAudioSink.cs"
+$sdl = [System.IO.File]::ReadAllText($sdlPath)
+$sdl = Replace-ExactlyOnce $sdl '    internal unsafe class SdlAudioSink : IAudioSink' '    internal unsafe class SdlAudioSink : IAudioSink, IAudioSinkWithCount' "SDL audio interface"
+$oldSdl = @'
+        public void Submit(short[] left, short[] right)
+        {
+            // If SDL still has plenty buffered, skip this block rather than pile on latency.
+            if (SDL_GetAudioStreamQueued(_stream) > _maxQueuedBytes) return;
+
+            int frames = left.Length;
+            int needed = frames * Channels;
+            if (_interleaved.Length < needed) _interleaved = new short[needed];
+
+            for (int i = 0; i < frames; i++)
+            {
+                _interleaved[i * 2] = left[i];
+                _interleaved[i * 2 + 1] = right[i];
+            }
+
+            fixed (short* ptr = _interleaved)
+            {
+                SDL_PutAudioStreamData(_stream, (IntPtr)ptr, needed * sizeof(short));
+            }
+        }
+'@
+$newSdl = @'
+        public void Submit(short[] left, short[] right) => Submit(left, right, Math.Min(left.Length, right.Length));
+
+        public void Submit(short[] left, short[] right, int frames)
+        {
+            frames = Math.Clamp(frames, 0, Math.Min(left.Length, right.Length));
+            if (frames == 0 || SDL_GetAudioStreamQueued(_stream) > _maxQueuedBytes) return;
+
+            int needed = frames * Channels;
+            if (_interleaved.Length < needed) _interleaved = new short[needed];
+            for (int i = 0; i < frames; i++)
+            {
+                _interleaved[i * 2] = left[i];
+                _interleaved[i * 2 + 1] = right[i];
+            }
+
+            fixed (short* ptr = _interleaved)
+                SDL_PutAudioStreamData(_stream, (IntPtr)ptr, needed * sizeof(short));
+        }
+'@
+$sdl = Replace-ExactlyOnce $sdl $oldSdl $newSdl "SDL audio submit methods"
+[System.IO.File]::WriteAllText($sdlPath, $sdl, [System.Text.UTF8Encoding]::new($false))
+
+$alPath = Join-Path $vendor "Sound/AudioStreamerAL.cs"
+$al = [System.IO.File]::ReadAllText($alPath)
+$al = Replace-ExactlyOnce $al '    public unsafe class AudioStreamerAL : IAudioSink' '    public unsafe class AudioStreamerAL : IAudioSink, IAudioSinkWithCount' "OpenAL audio interface"
+$oldAl = @'
+        public void Submit(short[] left, short[] right)
+        {
+            // Drop the oldest audio if the queue is backing up, so latency can't grow unbounded.
+            while (_audioQueue.Count > MAX_QUEUE_SIZE) _audioQueue.TryDequeue(out _);
+
+            for (int i = 0; i < left.Length; i++)
+            {
+                _audioQueue.Enqueue(left[i]);
+                _audioQueue.Enqueue(right[i]);
+            }
+        }
+'@
+$newAl = @'
+        public void Submit(short[] left, short[] right) => Submit(left, right, Math.Min(left.Length, right.Length));
+
+        public void Submit(short[] left, short[] right, int frames)
+        {
+            frames = Math.Clamp(frames, 0, Math.Min(left.Length, right.Length));
+            if (frames == 0) return;
+            while (_audioQueue.Count > MAX_QUEUE_SIZE) _audioQueue.TryDequeue(out _);
+            for (int i = 0; i < frames; i++)
+            {
+                _audioQueue.Enqueue(left[i]);
+                _audioQueue.Enqueue(right[i]);
+            }
+        }
+'@
+$al = Replace-ExactlyOnce $al $oldAl $newAl "OpenAL audio submit methods"
+[System.IO.File]::WriteAllText($alPath, $al, [System.Text.UTF8Encoding]::new($false))
+
+# Add the selectable emulation core preference.
+$configPath = Join-Path $vendor "Config/EmulatorConfig.cs"
+$config = [System.IO.File]::ReadAllText($configPath)
+$config = Replace-ExactlyOnce $config '    public class EmulatorConfig' @'
+    public enum EmulationBackend
+    {
+        Auto,
+        GameboySharp,
+        Mgba
+    }
+
+    public class EmulatorConfig
+'@ "emulation backend enum"
+$config = Replace-ExactlyOnce $config '        public double TurboSpeedMultiplier { get; set; } = 4.0;' @'
+        public double TurboSpeedMultiplier { get; set; } = 4.0;
+        public EmulationBackend EmulationBackend { get; set; } = EmulationBackend.Auto;
+'@ "emulation backend setting"
+[System.IO.File]::WriteAllText($configPath, $config, [System.Text.UTF8Encoding]::new($false))
+
+# Expose the true core choice in Settings > General.
+$settingsPath = Join-Path $vendor "UI/SettingsDialog.cs"
+$settings = [System.IO.File]::ReadAllText($settingsPath)
+$settings = Replace-ExactlyOnce $settings @'
+            if (ImGui.Combo("Turbo speed while holding Tab", ref turboIndex, turboLabels, turboLabels.Length))
+                _config.General.TurboSpeedMultiplier = turboValues[turboIndex];
+
+            string saveDir = _config.General.SaveDirectory;
+'@ @'
+            if (ImGui.Combo("Turbo speed while holding Tab", ref turboIndex, turboLabels, turboLabels.Length))
+                _config.General.TurboSpeedMultiplier = turboValues[turboIndex];
+
+            ImGui.SeparatorText("Emulation core");
+            string[] coreNames = { "Auto (recommended)", "GameboySharp (GB/GBC)", "mGBA (GB/GBC/GBA)" };
+            int coreIndex = (int)_config.General.EmulationBackend;
+            if (ImGui.Combo("Emulation backend", ref coreIndex, coreNames, coreNames.Length))
+                _config.General.EmulationBackend = (EmulationBackend)coreIndex;
+            ImGui.TextDisabled("Auto prefers mGBA for GB/GBC/GBA compatibility. GameboySharp remains available as a manual GB/GBC fallback.");
+
+            string saveDir = _config.General.SaveDirectory;
+'@ "core selection UI"
+[System.IO.File]::WriteAllText($settingsPath, $settings, [System.Text.UTF8Encoding]::new($false))
+
+Write-Host "mGBA audio sharing and core selection prepared." -ForegroundColor Green
+
+
+# Let the ROM loader extract GBA ROMs from ZIP files as well as GB/GBC ROMs.
+$romLoaderPath = Join-Path $vendor "RomFileLoader.cs"
+$romLoader = [System.IO.File]::ReadAllText($romLoaderPath)
+$romLoader = Replace-ExactlyOnce $romLoader '        private static readonly string[] RomExtensions = { ".gb", ".gbc", ".sgb" };' '        private static readonly string[] RomExtensions = { ".gb", ".gbc", ".sgb", ".gba" };' "mGBA ROM extension list"
+$oldGbaReject = @'
+            if (extension.Equals(".gba", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new NotSupportedException(
+                    "This is a Game Boy Advance ROM. The current PocketGB core only emulates Game Boy and Game Boy Color; a separate GBA core such as mGBA is required. The ROM file has not been modified.");
+            }
+
+'@
+if ($romLoader.Contains($oldGbaReject)) {
+    $romLoader = $romLoader.Replace($oldGbaReject, "")
+}
+[System.IO.File]::WriteAllText($romLoaderPath, $romLoader, [System.Text.UTF8Encoding]::new($false))
+
+# Add a routing callback to GameWindow and choose the correct core based on the resolved cartridge type.
+$windowPath = Join-Path $vendor "UI/GameWindow.cs"
+$window = [System.IO.File]::ReadAllText($windowPath)
+$window = Replace-ExactlyOnce $window '        private readonly Toolbar _toolbar;' @'
+        private readonly Toolbar _toolbar;
+        public Action<string>? OpenMgbaGameRequested { get; set; }
+'@ "mGBA game routing callback"
+
+$loadStart = $window.IndexOf("        private void LoadRomFromUi(string path)")
+$loadEnd = $window.IndexOf("        /// <summary>Tracks a smoothed FPS", $loadStart)
+if ($loadStart -lt 0 -or $loadEnd -lt 0 -or $loadEnd -le $loadStart) {
+    throw "Could not locate GameWindow.LoadRomFromUi."
+}
+$newLoadMethod = @'
+        private void LoadRomFromUi(string path)
+        {
+            try
+            {
+                string resolvedPath = RomFileLoader.ResolveRomPath(path);
+                string extension = Path.GetExtension(resolvedPath);
+                bool requiresMgba = extension.Equals(".gba", StringComparison.OrdinalIgnoreCase) ||
+                    _config.General.EmulationBackend != EmulationBackend.GameboySharp;
+
+                if (requiresMgba)
+                {
+                    if (OpenMgbaGameRequested == null)
+                        throw new InvalidOperationException("The mGBA window is not available in this build.");
+                    OpenMgbaGameRequested(path);
+                    return;
+                }
+
+                _emulator.LoadRom(resolvedPath, path);
+                _config.AddRecentRom(path);
+                ConfigStore.Save(_config);
+                Log.Information("Loaded ROM with GameboySharp: {Path}", path);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Failed to load ROM: {Path}", path);
+            }
+        }
+
+'@
+$window = $window.Substring(0, $loadStart) + $newLoadMethod + $window.Substring($loadEnd)
+[System.IO.File]::WriteAllText($windowPath, $window, [System.Text.UTF8Encoding]::new($false))
+
+# Include the managed adapters and built native DLL in the Windows app publish directory.
+$projectPath = Join-Path $vendor "GameboySharp.csproj"
+$project = [System.IO.File]::ReadAllText($projectPath)
+if (-not $project.Contains("native/mgba/managed/*.cs")) {
+    $items = @'
+  <ItemGroup>
+    <Compile Include="../../native/mgba/managed/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(RuntimeIdentifier)' == 'win-x64'">
+    <Content Include="../../artifacts/native/win-x64/**/*">
+      <Link>%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+'@
+    $project = $project.Replace("</Project>", $items + [Environment]::NewLine + "</Project>")
+}
+[System.IO.File]::WriteAllText($projectPath, $project, [System.Text.UTF8Encoding]::new($false))
+
+Write-Host "GBA ROM loading, core routing and native publish assets prepared." -ForegroundColor Green
+
+
+# Route command-line .gba files to mGBA instead of asking the Game Boy-only core to parse them.
+$programPath = Join-Path $vendor "Program.cs"
+$program = [System.IO.File]::ReadAllText($programPath)
+$startupStart = $program.IndexOf("        if (args.Length > 0)")
+$startupEnd = $program.IndexOf('        Log.Information("Creating windows...");', $startupStart)
+if ($startupStart -lt 0 -or $startupEnd -lt 0 -or $startupEnd -le $startupStart) {
+    throw "Could not find Program.cs startup game-loading block."
+}
+$startupBlock = @'
+        string? mgbaStartupRom = null;
+        if (args.Length > 0)
+        {
+            try
+            {
+                string resolvedPath = RomFileLoader.ResolveRomPath(args[0]);
+                bool useMgba = Path.GetExtension(resolvedPath).Equals(".gba", StringComparison.OrdinalIgnoreCase) ||
+                    config.General.EmulationBackend != EmulationBackend.GameboySharp;
+                if (useMgba) mgbaStartupRom = args[0];
+                else emulator.LoadRom(resolvedPath, args[0]);
+                config.AddRecentRom(args[0]);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Failed to load game file at '{Path}'. Open another game from the toolbar.", args[0]);
+            }
+        }
+
+'@
+$program = $program.Substring(0, $startupStart) + $startupBlock + $program.Substring($startupEnd)
+
+# Create the optional mGBA window lazily. Closing it returns to the existing GameboySharp window.
+$windowAnchor = @'
+        using var gameWindow = new GameWindow(emulator, config);
+        using var debugWindow = new DebugWindow(emulator);
+
+'@
+$windowReplacement = @'
+        using var gameWindow = new GameWindow(emulator, config);
+        using var debugWindow = new DebugWindow(emulator);
+        MgbaWindow? mgbaWindow = null;
+        var framePacer = new EmulationFramePacer();
+        bool shuttingDown = false;
+
+        void ReturnToGameboySharp()
+        {
+            if (shuttingDown) return;
+            framePacer.Reset();
+            gameWindow.SilkWindow.IsVisible = true;
+            debugWindow.SilkWindow.IsVisible = false;
+        }
+
+        void OpenMgbaGame(string path)
+        {
+            try
+            {
+                if (mgbaWindow == null || mgbaWindow.IsClosing)
+                {
+                    mgbaWindow?.Dispose();
+                    mgbaWindow = new MgbaWindow(config, ReturnToGameboySharp);
+                }
+
+                mgbaWindow.LoadRom(path);
+                framePacer.Reset();
+                gameWindow.SilkWindow.IsVisible = false;
+                debugWindow.SilkWindow.IsVisible = false;
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Could not open the mGBA backend for {Path}", path);
+                ReturnToGameboySharp();
+            }
+        }
+
+        gameWindow.OpenMgbaGameRequested = OpenMgbaGame;
+        if (mgbaStartupRom != null) OpenMgbaGame(mgbaStartupRom);
+
+'@
+$program = Replace-ExactlyOnce $program $windowAnchor $windowReplacement "mGBA window initialization"
+
+$oldShutdown = @'
+        bool shuttingDown = false;
+        void ShutDownBothWindows()
+        {
+            if (shuttingDown) return;
+            shuttingDown = true;
+            gameWindow.SilkWindow.Close();
+            debugWindow.SilkWindow.Close();
+        }
+'@
+$newShutdown = @'
+        void ShutDownBothWindows()
+        {
+            if (shuttingDown) return;
+            shuttingDown = true;
+            if (mgbaWindow != null && !mgbaWindow.IsClosing)
+                mgbaWindow.SilkWindow.Close();
+            gameWindow.SilkWindow.Close();
+            debugWindow.SilkWindow.Close();
+        }
+'@
+$program = Replace-ExactlyOnce $program $oldShutdown $newShutdown "mGBA shutdown callback"
+
+# One scheduler services either core, using that core's native frame rate and pause state.
+$loopStart = $program.IndexOf('        Log.Information("Starting main loop...");')
+$loopEnd = $program.IndexOf('        Log.Information("Closing PocketGB.");', $loopStart)
+if ($loopStart -lt 0 -or $loopEnd -lt 0 -or $loopEnd -le $loopStart) {
+    throw "Could not find Program.cs main-loop boundaries."
+}
+
+$loop = @'
+        Log.Information("Starting main loop...");
+        var frameTimer = Stopwatch.StartNew();
+        long previousTimestamp = Stopwatch.GetTimestamp();
+        const double presentationFrameMs = 1000.0 / GameboyConstants.FramesPerSecond;
+        int turboRenderCounter = 0;
+
+        while (!gameWindow.SilkWindow.IsClosing && !debugWindow.SilkWindow.IsClosing)
+        {
+            if (mgbaWindow != null && mgbaWindow.IsClosing)
+            {
+                mgbaWindow.Dispose();
+                mgbaWindow = null;
+                framePacer.Reset();
+            }
+
+            long currentTimestamp = Stopwatch.GetTimestamp();
+            double elapsedSeconds = (currentTimestamp - previousTimestamp) / (double)Stopwatch.Frequency;
+            previousTimestamp = currentTimestamp;
+            frameTimer.Restart();
+
+            gameWindow.SilkWindow.DoEvents();
+            debugWindow.SilkWindow.DoEvents();
+
+            bool useMgba = mgbaWindow != null && !mgbaWindow.IsClosing;
+            if (useMgba)
+            {
+                mgbaWindow!.SilkWindow.DoEvents();
+                mgbaWindow.SilkWindow.DoUpdate();
+            }
+            else
+            {
+                gameWindow.SilkWindow.DoUpdate();
+            }
+
+            bool turbo = useMgba ? mgbaWindow!.TurboActive : gameWindow.TurboActive;
+            double requestedSpeed = turbo ? config.General.TurboSpeedMultiplier : config.General.SpeedMultiplier;
+            double gameFrameRate = useMgba ? mgbaWindow!.NominalFrameRate : GameboyConstants.FramesPerSecond;
+            bool paused = useMgba
+                ? !mgbaWindow!.HasRom || mgbaWindow.IsPaused
+                : !emulator.HasRom || emulator.IsPaused;
+
+            int framesToRun = framePacer.Consume(elapsedSeconds, requestedSpeed, gameFrameRate, paused);
+
+            if (useMgba)
+            {
+                mgbaWindow!.RunFrames(framesToRun);
+                mgbaWindow.RecordEmulatedFrames(framesToRun);
+            }
+            else
+            {
+                emulator.RunFrames(framesToRun);
+                gameWindow.RecordEmulatedFrames(framesToRun);
+            }
+
+            int renderInterval = turbo ? (requestedSpeed >= 8.0 ? 3 : 2) : 1;
+            bool renderNow = !turbo || (++turboRenderCounter % renderInterval == 0);
+            if (renderNow)
+            {
+                if (useMgba)
+                    mgbaWindow!.SilkWindow.DoRender();
+                else
+                {
+                    gameWindow.SilkWindow.DoRender();
+                    if (debugWindow.SilkWindow.IsVisible)
+                        debugWindow.SilkWindow.DoRender();
+                }
+            }
+
+            if (!turbo && !config.Video.VSync)
+            {
+                double remainingMs = presentationFrameMs - frameTimer.Elapsed.TotalMilliseconds;
+                int sleepMs = (int)Math.Floor(remainingMs);
+                if (sleepMs > 0) Thread.Sleep(sleepMs);
+                else if (remainingMs > 0) Thread.SpinWait(50);
+            }
+        }
+
+        mgbaWindow?.Dispose();
+'@
+
+$program = $program.Substring(0, $loopStart) + $loop + $program.Substring($loopEnd)
+[System.IO.File]::WriteAllText($programPath, $program, [System.Text.UTF8Encoding]::new($false))
+
+Write-Host "mGBA command-line routing and unified GB/GBA frame scheduler prepared." -ForegroundColor Green
+
+
+# Test the complete managed-to-native path with a tiny synthetic GBA homebrew image.
+# The test ROM contains a valid GBA entry-point signature and loops in place after boot.
+$testDirectory = Join-Path $vendor "GameboySharp.Tests"
+$testPath = Join-Path $testDirectory "MgbaNativeSmokeTests.cs"
+$testSource = @'
+using System;
+using System.IO;
+using GameboySharp;
+using Xunit;
+
+namespace GameboySharp.Tests.Native;
+
+public sealed class MgbaNativeSmokeTests
+{
+    [Fact]
+    public void NativeCoreLoadsAndRunsSyntheticGbCartridge()
+    {
+        Environment.SetEnvironmentVariable("GBSHARP_AUDIO", "none");
+
+        byte[] rom = new byte[32 * 1024];
+        // A minimal program that loops forever at the cartridge entry point.
+        rom[0x100] = 0x18; // JR
+        rom[0x101] = 0xFE; // -2: branch back to 0x0100
+        // mGBA's cartridge detector checks the Nintendo logo prefix at 0x0104.
+        rom[0x104] = 0xCE;
+        rom[0x105] = 0xED;
+        rom[0x106] = 0x66;
+        rom[0x107] = 0x66;
+        byte[] title = System.Text.Encoding.ASCII.GetBytes("PGB GB TEST");
+        Array.Copy(title, 0, rom, 0x134, title.Length);
+        rom[0x147] = 0x00; // ROM-only
+        rom[0x148] = 0x00; // 32 KiB ROM
+        rom[0x149] = 0x00; // No external RAM
+
+        byte headerChecksum = 0;
+        for (int i = 0x134; i <= 0x14C; i++)
+            headerChecksum = (byte)(headerChecksum - rom[i] - 1);
+        rom[0x14D] = headerChecksum;
+
+        string path = Path.Combine(Path.GetTempPath(), $"pocketgb-mgba-gb-smoke-{Guid.NewGuid():N}.gb");
+        string statePath = Path.ChangeExtension(path, ".state0");
+        File.WriteAllBytes(path, rom);
+        try
+        {
+            using var core = new MgbaCore(new EmulatorConfig());
+            core.LoadRom(path);
+
+            Assert.True(core.HasRom);
+            Assert.Equal("Game Boy / Color", core.PlatformName);
+            Assert.Equal(160, core.FrameWidth);
+            Assert.Equal(144, core.FrameHeight);
+            Assert.Equal(160 * 144, core.FrameBuffer.Length);
+
+            core.RunFrames(2);
+            Assert.Equal(160 * 144, core.FrameBuffer.Length);
+
+            core.SaveState();
+            Assert.True(File.Exists(statePath));
+            Assert.True(core.LoadState());
+            Assert.Equal(160, core.FrameWidth);
+            Assert.Equal(144, core.FrameHeight);
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+            if (File.Exists(statePath)) File.Delete(statePath);
+            Environment.SetEnvironmentVariable("GBSHARP_AUDIO", null);
+        }
+    }
+
+    [Fact]
+    public void NativeCoreLoadsAndRunsSyntheticGbaCartridge()
+    {
+        Environment.SetEnvironmentVariable("GBSHARP_AUDIO", "none");
+
+        byte[] rom = new byte[32 * 1024];
+
+        // ARM branch from the GBA reset vector at 0x08000000 to 0x080000C0.
+        rom[0x00] = 0x2E;
+        rom[0x01] = 0x00;
+        rom[0x02] = 0x00;
+        rom[0x03] = 0xEA;
+
+        // A tight ARM branch-to-self loop at 0x080000C0 keeps the homebrew test ROM running.
+        rom[0xC0] = 0xFE;
+        rom[0xC1] = 0xFF;
+        rom[0xC2] = 0xFF;
+        rom[0xC3] = 0xEA;
+
+        // Required GBA cartridge header marker.
+        rom[0xB2] = 0x96;
+
+        // Printable title and game code for deterministic game-info parsing.
+        byte[] title = System.Text.Encoding.ASCII.GetBytes("PGB SMOKE   ");
+        Array.Copy(title, 0, rom, 0xA0, Math.Min(12, title.Length));
+        byte[] code = System.Text.Encoding.ASCII.GetBytes("PGBA");
+        Array.Copy(code, 0, rom, 0xAC, 4);
+
+        string path = Path.Combine(Path.GetTempPath(), $"pocketgb-mgba-smoke-{Guid.NewGuid():N}.gba");
+        string statePath = Path.ChangeExtension(path, ".state0");
+
+        File.WriteAllBytes(path, rom);
+        try
+        {
+            using var core = new MgbaCore(new EmulatorConfig());
+            core.LoadRom(path);
+
+            Assert.True(core.HasRom);
+            Assert.Equal(240, core.FrameWidth);
+            Assert.Equal(160, core.FrameHeight);
+            Assert.Equal(240 * 160, core.FrameBuffer.Length);
+
+            core.RunFrames(2);
+            Assert.Equal(240 * 160, core.FrameBuffer.Length);
+
+            core.SaveState();
+            Assert.True(File.Exists(statePath));
+            Assert.True(core.LoadState());
+            Assert.Equal(240, core.FrameWidth);
+            Assert.Equal(160, core.FrameHeight);
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+            if (File.Exists(statePath)) File.Delete(statePath);
+            Environment.SetEnvironmentVariable("GBSHARP_AUDIO", null);
+        }
+    }
+}
+'@
+
+New-Item -ItemType Directory -Force $testDirectory | Out-Null
+[System.IO.File]::WriteAllText($testPath, $testSource, [System.Text.UTF8Encoding]::new($false))
+
+Write-Host "Native mGBA GBA frame and save-state smoke test generated." -ForegroundColor Green

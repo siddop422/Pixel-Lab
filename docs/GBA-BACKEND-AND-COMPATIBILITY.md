@@ -1,73 +1,82 @@
-# GBA backend and multi-core compatibility plan
+# PocketGB multi-system backend
 
-## Current state
+## Current implementation
 
-PocketGB currently embeds the pinned GameboySharp core. That core emulates the original Game Boy and Game Boy Color only. It cannot execute GBA ARM7TDMI code, and a .gba extension or a graphics-backend change cannot add GBA support.
+PocketGB now includes two real emulation cores on the Windows x64 build:
 
-The uploaded test image was inspected locally: its header title is **balatro-gba**, and it is a 5,061,324-byte .gba image. Its bytes were not committed or uploaded to this repository. The current build is being changed to show .gba files in the file picker and give an explicit unsupported-core message instead of a generic extension error.
+- **GameboySharp** — the existing managed Game Boy / Game Boy Color core, retained as a manual fallback.
+- **mGBA** — the pinned native mGBA core for Game Boy Advance, Game Boy and Game Boy Color. Auto mode prefers mGBA for `.gba`, `.gb`, `.gbc`, and `.sgb` cartridges.
 
-## Recommended GBA engine: mGBA
+The upstream mGBA source is pinned to commit [431935616c0e216d650b25b2ea0c0acccd359038](https://github.com/mgba-emu/mgba/commit/431935616c0e216d650b25b2ea0c0acccd359038). The build uses mGBA's `LIBMGBA_ONLY` core library with its GBA and GB cores enabled. Qt, SDL desktop frontends, debugger UI, and other optional frontends are not shipped. The native DLL is approximately 855 KB in the validated Windows artifact, and the MPL-2.0 licence notice is included in the portable package.
 
-Use the official [mGBA project](https://github.com/mgba-emu/mgba) as a separate native core instead of writing a second CPU/PPU/APU from scratch. The project supports Game Boy Advance as well as original Game Boy and Game Boy Color, includes an HLE BIOS implementation, and is designed to run at full speed on low-end hardware. The upstream core is MPL-2.0 licensed. See the [official mGBA README](https://github.com/mgba-emu/mgba) and the [mGBA core API](https://github.com/mgba-emu/mgba/blob/master/include/mgba/core/core.h).
+mGBA uses its HLE BIOS configuration. No commercial BIOS image or game ROM is bundled.
 
-The mCore API is a vtable shared by the GBA and GB cores. It exposes ROM loading, frame execution, key input, pixel access, audio buffers, and save/load state operations. mCoreFindVF can select the correct platform from a cartridge image. An existing native wrapper demonstrates this same design and documents the different native display sizes: 240×160 for GBA and 160×144 for GB. See [mGBA-wasm core mapping](https://github.com/wasm-gaming/mGBA-wasm/blob/main/CORE.md).
+## Selecting the emulation core
 
-## Required PocketGB architecture changes
+Open **Settings → General → Emulation core**:
 
-Do not make GameWindow depend directly on a Game Boy PPU if the app is to support more than one system. Introduce a small core contract first:
+| Option | Behaviour |
+| --- | --- |
+| **Auto (recommended)** | `.gba`, `.gb`, `.gbc`, and `.sgb` use mGBA for broader core compatibility |
+| **GameboySharp (GB/GBC)** | Use the original PocketGB Game Boy / Color core for GB/GBC games |
+| **mGBA (GB/GBC/GBA)** | Use mGBA for supported GBA and GB/GBC cartridges |
 
-~~~csharp
-internal interface IEmulationCore : IDisposable
-{
-    string SystemName { get; }
-    string GameTitle { get; }
-    int FrameWidth { get; }
-    int FrameHeight { get; }
-    double NominalFrameRate { get; }
-    bool IsPaused { get; set; }
-    ReadOnlyMemory<uint> VideoFrame { get; }
-    void LoadRom(string path);
-    void SetButtons(uint buttons);
-    void RunFrames(int count);
-    void Reset();
-    byte[] SaveState();
-    bool LoadState(ReadOnlySpan<byte> state);
-    void SaveBattery();
-}
-~~~
+GBA images are always routed to mGBA because the GameboySharp core cannot execute ARM7TDMI instructions.
 
-Implement:
-- GameboySharpCoreAdapter around the current GB/GBC Emulator.
-- MgbaCoreAdapter around a small, pinned native mGBA C ABI wrapper.
-- CoreFactory to detect cartridge type and choose the core in Auto mode.
+## Display and controls
 
-The UI must read frame dimensions from the selected core. Do not hard-code 160×144 into the renderer: GBA outputs 240×160. The audio adapter must accept the active core's sample rate. GBA controls also need X/Y/L/R mappings in addition to the eight Game Boy buttons.
+The mGBA window reads the selected core's current framebuffer dimensions:
 
-## Native build and packaging
+- Game Boy / Color: 160×144
+- Game Boy Advance: 240×160
 
-1. Pin an official mGBA release/commit as a separate source dependency and preserve its MPL-2.0 notices.
-2. Build a minimal mgba.dll native library plus a small C ABI shim in CI for win-x64. Do not ship Qt/SDL frontends when only the core API is needed.
-3. Expose simple functions for create/destroy, ROM load, run frame, dimensions, pixels, input, audio pull, reset and state serialization.
-4. Load the native library from runtimes/win-x64/native; keep the GB/GBC-only executable usable when the GBA core is absent.
-5. Do not bundle BIOS dumps or commercial ROM files. mGBA has an HLE BIOS; a user-supplied legal BIOS can be an optional setting.
+It uses the same OpenGL 3.3 presentation path as the rest of PocketGB, with nearest-neighbour pixel-perfect or bilinear filtering. The display scales to fit the window while preserving the correct aspect ratio.
 
-## Backend settings UX
+Default keyboard controls in the mGBA window:
 
-Only expose choices after each implementation is present and tested:
+| Action | Key |
+| --- | --- |
+| D-pad | Arrow keys |
+| A / B | Z / X |
+| Start / Select | Enter / Right Shift |
+| L / R | A / S |
+| Pause / resume | Space |
+| Fast-forward (hold) | Tab |
+| Quick save / load | F5 / F8 |
+| Reset | F9 |
 
-- **Emulation core:** Auto, GameboySharp (GB/GBC), mGBA (GB/GBC/GBA).
-- **Graphics API:** OpenGL (currently implemented); Vulkan only after a real Vulkan renderer and matching ImGui presenter exist.
-- **Pixel processing:** GPU shader effects versus CPU compatibility processing. CPU pixel processing still needs a presentation surface; it is not a no-GPU window by itself.
+Gamepad A/B, D-pad, Start/Back and shoulder/trigger buttons are mapped where the connected controller exposes them.
 
-Auto mode should select mGBA for GBA images and GameboySharp for GB/GBC unless the user has explicitly chosen another installed core. A missing core must report exactly which backend is unavailable. Never show a nonfunctional backend as selectable.
+The mGBA window includes one quick-save state per game, battery save data (`.sav`), reset, pause, speed and a top-right overlay which reports render FPS separately from emulated game FPS. The shared frame scheduler supports the same 0.5× / 1× / 2× speed options and configurable Tab turbo multiplier as the GameboySharp window.
 
-## Compatibility and test gates
+## Audio, saves and native runtime
 
-A goal of broad GBA compatibility is realistic with mGBA, but no emulator should promise every game, peripheral or special cartridge works. Test actual ROMs and publish a compatibility matrix:
-- GBA commercial/homebrew suite, including the uploaded Balatro GBA image when testing locally.
-- GB/GBC homebrew such as Geometry Dash GB, using the exact ROM version.
-- GB/GBC acceptance and timer/PPU tests, plus save-state round trips for both cores.
-- Input, audio, save RAM, save states, reset, aspect ratio, 240×160 resizing, turbo, and speed changes.
-- Long-run tests for RTC and battery-save persistence.
+The managed adapter connects to PocketGB's existing SDL or OpenAL audio output. It pulls mGBA's stereo samples and resamples them to the selected output rate. Reusable pixel and audio buffers avoid allocating new large frame arrays on every emulated frame.
 
-The native core is deliberately not advertised as available in the current PocketGB build. The required adapter and native packaging must pass CI before that dropdown is added.
+Battery data is saved beside the original ROM (or in the configured save folder). mGBA state data is written to a `.state0` file beside that ROM. ZIP archives continue to use PocketGB's ROM cache, while saves remain beside the original ZIP file.
+
+The Windows x64 build includes `pocketgb-mgba.dll`, the native build manifest, and `licenses/mGBA-MPL-2.0.txt`. The build is pinned and reproducible using `scripts/Build-Mgba.ps1`.
+
+## Validation
+
+The Windows CI run [45683839180](https://github.com/siddop422/Pixel-Lab/actions/runs/45683839180) completed successfully:
+
+- 92 tests passed, 0 failed, 7 skipped (99 total).
+- Includes a generated synthetic GBA cartridge test which loads through the native mGBA adapter, verifies 240×160 output, runs two frames, and saves/restores a state.
+- The latest branch also adds a generated synthetic GB cartridge test which verifies 160×144 output, frame execution, and save-state round-trip through the same mGBA adapter.
+- Native mGBA DLL build, self-contained Windows x64 publish, installer compilation, portable ZIP creation, and checksum generation all passed.
+- The portable ZIP contains `pocketgb-mgba.dll` and the MPL-2.0 notice.
+
+The seven skipped tests need optional external Game Boy ROM or CPU-vector datasets which are not bundled with the repository.
+
+## Uploaded Balatro GBA image
+
+The user-provided `balatro-gba-0.2.2.gba` image was inspected locally but was not committed or uploaded to GitHub. Its header contains the GBA entry signature byte `0xEA` at offset `0x03` and the fixed GBA header marker `0x96` at offset `0xB2`, so it matches the cartridge signature checks used by the pinned mGBA version. The exact game was not run in CI; the automated test uses a small generated homebrew-style GBA image instead.
+
+A matching header establishes that mGBA should detect it as a GBA cartridge, but does not guarantee every feature of that particular game works. Please test the installed build with the original file and report any reproducible in-game issue.
+
+## Graphics API status and limitations
+
+The **emulation core** selector is implemented. The **graphics API** is still OpenGL 3.3 only. Vulkan is not listed as available because a separate Vulkan renderer and a Vulkan-compatible ImGui presenter have not been implemented. CPU pixel processing is also not currently a separate display backend; offering it would still require a presentation surface.
+
+mGBA substantially broadens GBA and GB/GBC compatibility, but no emulator can honestly promise every commercial game, peripheral, unusual cartridge, or ROM hack works perfectly. Compatibility should continue to be tested against actual games and homebrew suites.

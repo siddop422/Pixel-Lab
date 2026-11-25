@@ -2,137 +2,141 @@
 
 ![PocketGB logo](assets/PocketGB-logo.svg)
 
-PocketGB is a lightweight desktop emulator for original Nintendo Game Boy and Game Boy Color cartridges. It includes save states, automatic cartridge saves, keyboard/gamepad input, configurable display filters, window/fullscreen controls, and a self-contained runtime.
+PocketGB is a lightweight Windows desktop emulator for Nintendo Game Boy, Game Boy Color, and Game Boy Advance cartridges. It includes native mGBA support for GBA, save states, battery saves, keyboard/gamepad input, configurable display filters, window/fullscreen controls, a real frame-based fast-forward scheduler, and a self-contained runtime.
 
 ## Latest Windows build
 
-The current release is available from the official [PocketGB GitHub Releases page](https://github.com/siddop422/Pixel-Lab/releases).
+The official release page is [PocketGB GitHub Releases](https://github.com/siddop422/Pixel-Lab/releases). The next release, **PocketGB 1.3.0**, adds the native mGBA GBA backend; the existing public 1.2.0 installer does not yet contain that backend.
 
 | Download | What it is |
 | --- | --- |
-| **PocketGB-Setup-1.2.0.exe** | Windows 10/11 x64 installer. Installs per-user, adds Start Menu shortcuts, and can optionally add a desktop shortcut or associate .gb/.gbc files. |
-| **PocketGB-Portable-1.2.0.zip** | Self-contained Windows x64 portable build. Extract and run `PocketGB.exe`. |
-| **SHA256SUMS.txt** | SHA-256 hashes for verifying the exact downloaded files. |
+| **PocketGB-Setup-1.3.0.exe** | Windows 10/11 x64 installer. Installs per-user and upgrades the existing PocketGB installation. |
+| **PocketGB-Portable-1.3.0.zip** | Self-contained Windows x64 portable build. Extract and run `PocketGB.exe`. |
+| **SHA256SUMS.txt** | SHA-256 hashes for verifying the exact downloads. |
 
-The installer keeps the same application ID and install directory between versions, so running a newer setup over PocketGB 1.1.0 upgrades that installation instead of creating a second app entry. User configuration and game saves are stored separately from the application directory.
+The installer retains the same application ID and install folder, so running a newer setup over PocketGB 1.2.0 upgrades that installation instead of creating a second app entry. User configuration and game saves remain separate from the application directory.
 
-**Safe download guidance:** download only from the official GitHub Releases page linked above. Compare the installer/ZIP hash with `SHA256SUMS.txt` before running it. The Windows installer is not Authenticode-signed, so Windows SmartScreen may show an unknown-publisher warning; a checksum confirms file integrity, not publisher identity.
+**Safe download guidance:** download only from the official GitHub Releases page. Compare the installer/ZIP hash with `SHA256SUMS.txt` before running it. The installer is not Authenticode-signed; SmartScreen may show an unknown-publisher warning. A checksum confirms file integrity, not publisher identity.
 
-## What's new in 1.2.0
+## What's new in 1.3.0
 
-- PocketGB application, taskbar, and installer icon branding.
-- Larger, scrollable display settings with custom window width/height, fullscreen, and V-Sync.
-- Nearest-neighbour, bilinear, and sharp-bilinear GPU texture filtering.
-- LCD grid, scanlines, CRT curvature/vignette, brightness, and saturation.
-- Experimental temporal frame blending. This blends adjacent frames and can cause ghosting; it does **not** use motion vectors, interpolate object movement, or double the real game FPS.
-- Live OpenGL vendor, renderer, and driver/version diagnostics.
-- A low-end graphics profile that disables optional post-processing and frame blending.
-- Correct ROM header handling for special Game Boy ROM size codes 0x52, 0x53, and 0x54.
-- Standard ROM+RAM and ROM+RAM+battery cartridge handling.
-- Unsupported cartridge mapper IDs now produce an explicit error instead of being silently treated as ROM-only.
+- Native mGBA core for Game Boy Advance and optional GB/GBC playback on Windows x64.
+- Emulation core selector: Auto, GameboySharp (GB/GBC), and mGBA (GB/GBC/GBA).
+- Auto routes `.gba`, `.gb`, `.gbc`, and `.sgb` files to mGBA for broader compatibility.
+- GBA output at 240×160 with dynamic aspect-ratio scaling; GB/GBC output remains 160×144.
+- mGBA input mapping for GBA controls, stereo audio, battery saves, reset, and quick save/load state.
+- Real frame-based speed multipliers and configurable Tab turbo (2×–16×); faster render FPS is shown separately from actual emulated game FPS.
+- Core-only mGBA native DLL build, pinned upstream source revision, and MPL-2.0 notice included in the portable package.
+- Reduced self-contained publish size by disabling ReadyToRun images; installer uses LZMA2/ultra64 compression.
 
 ## Systems and cartridge compatibility
 
 | System / cartridge | Status |
 | --- | --- |
-| Original Game Boy (DMG) | Supported by the current core |
-| Game Boy Color (CGB) | Supported by the current core |
-| Standard ROM-only, MBC1, MBC2, MBC3, and MBC5 types | Implemented |
-| ROM+RAM and ROM+RAM+battery (0x08/0x09) | Implemented in this update |
-| Special ROM size codes 0x52/0x53/0x54 | Header parsing implemented |
-| MBC6, MBC7, MMM01, HuC-1, HuC-3, TAMA5, Pocket Camera | Not implemented yet; the emulator now reports unsupported mapper IDs clearly |
+| Original Game Boy (DMG) | GameboySharp core |
+| Game Boy Color (CGB) | GameboySharp by default; mGBA selectable |
+| Game Boy Advance (GBA) | mGBA native core in the Windows x64 build |
+| Standard ROM-only, MBC1, MBC2, MBC3, and MBC5 | Implemented by GameboySharp |
+| Standard ROM+RAM and ROM+RAM+battery (0x08/0x09) | Implemented by GameboySharp |
+| Special GB ROM size codes 0x52/0x53/0x54 | Header parsing implemented |
+| MBC6, MBC7, MMM01, HuC-1, HuC-3, TAMA5, Pocket Camera | Not implemented in GameboySharp; uncommon cartridge types are reported clearly |
 | Super Game Boy enhancements | Not implemented |
-| Game Boy Advance (.gba) | **Not supported by the current build**. .gba files are detected and report that a separate GBA core is required. |
 
-PocketGB is a Game Boy / Game Boy Color emulator, not a universal handheld emulator.
+mGBA is the recommended Auto core for GBA and GB/GBC because it supports a broader set of cartridge types; GameboySharp remains available as a manual GB/GBC fallback. No emulator can guarantee every game, peripheral, mapper, or ROM hack works perfectly. The automated suite includes generated native GBA and GB cartridge smoke tests; the uploaded Balatro GBA ROM and the Geometry Dash GB ROM have not been run in CI. Its local header check matches the GBA marker bytes recognised by mGBA.
 
-GBA backend work is tracked in [GBA-BACKEND-AND-COMPATIBILITY.md](docs/GBA-BACKEND-AND-COMPATIBILITY.md). The recommended implementation is a native mGBA core adapter, not a fake backend toggle. The current build still cannot run .gba files. GBA uses different hardware and requires a separate GBA emulation core. A `.gba` file cannot be made compatible by changing its extension or adding it to the file picker. No commercial ROMs or BIOS files are included.
+No commercial ROMs or BIOS files are included. mGBA's HLE BIOS is used by default.
 
-“Supported” means the core has an implementation for the listed system/controller; it is not a claim that every commercial or homebrew ROM has been individually tested. The repository's automated tests cover core components and cartridge parsing, but do not establish a 100% compatibility rate. Please report a reproducible issue with the ROM title and mapper information when a game fails.
+## Emulation backends
+
+Open **Settings → General → Emulation core**:
+
+| Option | Behaviour |
+| --- | --- |
+| **Auto (recommended)** | Prefers mGBA for `.gba`, `.gb`, `.gbc`, and `.sgb` for broader cartridge compatibility |
+| **GameboySharp (GB/GBC)** | Uses the original Game Boy / Color core |
+| **mGBA (GB/GBC/GBA)** | Uses the native mGBA core for supported GBA and GB/GBC images |
+
+The mGBA core is a separate native library built from pinned upstream mGBA source. Auto uses it for all supported handheld ROM types; choose GameboySharp manually when you need the original GB/GBC core and its debugger/save-state features. mGBA is not a GameboySharp extension or a file-extension trick.
 
 ## Display and graphics
 
 - Window resolution presets and custom window width/height.
 - Fullscreen and V-Sync.
-- Integer scaling and 10:9 aspect-ratio lock.
-- Nearest-neighbour (pixel-perfect), bilinear, and sharp-bilinear texture filters.
+- Integer scaling and aspect-ratio preservation.
+- Nearest-neighbour, bilinear, and sharp-bilinear filtering in the GameboySharp display.
 - DMG green, grey, Pocket, and yellow palettes.
-- Optional scanlines, LCD pixel grid, and CRT curvature/vignette.
-- Brightness and saturation adjustment.
-- Experimental temporal frame blending.
+- Optional scanlines, LCD pixel grid, CRT curvature/vignette, brightness, and saturation.
 - A low-end profile for weaker CPUs/GPUs.
 
-**Resolution note:** these settings change the desktop window/output size. The emulated Game Boy framebuffer remains 160×144 pixels; a larger output resolution does not increase the original console's internal resolution or create new game detail.
+**Graphics API:** OpenGL 3.3 Core is the only implemented graphics API. The mGBA window uses the same OpenGL presentation path. Vulkan and Direct3D are not exposed as working choices because their renderers have not been implemented. CPU-only window presentation is not implemented.
 
-**Graphics backends:** OpenGL 3.3 Core is the only implemented graphics API in this build. The Video tab reports the active GPU vendor, renderer, and driver/version. Vulkan and Direct3D are not exposed as selectable options because working renderers for those APIs have not been implemented.
+**Resolution note:** enlarging the desktop window only scales the console's original framebuffer. It does not create extra source detail.
 
-**Audio backends:** Settings includes Auto, SDL, and OpenAL. A backend change applies after restarting PocketGB.
+## Speed and performance
+
+Normal speed (0.5× / 1× / 2×) changes actual emulated frame advancement, not just the time the UI loop sleeps. Hold **Tab** for configurable turbo (2×–16×) in Settings → General. The top-right overlay reports **RENDER FPS**, **GAME FPS**, and measured emulation speed separately. Turbo reduces UI/GL redraw frequency so more time is available to the emulation core.
+
+On lower-end hardware, use the Low-end / maximum performance profile, pixel-perfect scaling, and keep optional post-processing disabled. Performance depends on the game, audio output, driver and system load.
 
 ## Controls
 
-| Game Boy button / action | Default keyboard key |
+| Game Boy / GBA action | Default keyboard key |
 | --- | --- |
 | D-pad | Arrow keys |
-| A | Z |
-| B | X |
-| Start | Enter |
-| Select | Right Shift |
+| A / B | Z / X |
+| Start / Select | Enter / Right Shift |
+| GBA L / R | A / S |
 | Pause / resume | Space |
-| Quick save | F5 |
-| Quick load | F8 |
-| Choose save slot | 0–9 |
 | Fast-forward (hold) | Tab |
-| Frame advance while paused | N |
-| Show / hide debug tools | F11 |
-| Reset | R |
+| Quick save / load | F5 / F8 |
+| Reset in mGBA window | F9 |
+| Frame advance while paused (GameboySharp) | N |
+| Show / hide GameboySharp debug tools | F11 |
 
-Keyboard and gamepad bindings can be changed in Settings.
+Gamepad D-pad, face buttons, Start/Back and shoulder/trigger buttons are mapped where supported by the connected controller. Game Boy bindings can be changed in Settings.
 
 ## Saves and supported files
 
-- Ten save-state slots per game, with thumbnails and timestamps.
-- Quick save (F5) and quick load (F8).
-- Automatic battery-backed cartridge saves (.sav), including MBC3 RTC data.
-- Save files and states are stored next to the original ROM, or in the optional save folder.
-- Direct .gb, .gbc, and .sgb cartridge images, plus ZIP archives containing those files.
+- Direct `.gb`, `.gbc`, `.sgb`, and `.gba` cartridge images.
+- ZIP archives containing supported GB/GBC/GBA ROMs.
+- GameboySharp: ten save-state slots, quick save/load and battery-backed `.sav` files, including MBC3 RTC data.
+- mGBA: quick save/load state (`.state0`) and battery-backed `.sav` data.
+- Saves are written beside the original ROM or ZIP, or to the optional configured save folder.
 - ZIP extraction is cached; replacing an archive invalidates the old cache. Save files remain beside the original ZIP, not in the cache.
 - ZIP entries are limited to 64 MiB. 7z and RAR archives are not supported.
 
-## Performance and requirements
+## Requirements
 
-- Windows 10/11 x64 with an OpenGL 3.3-compatible graphics driver.
-- The application bundles its .NET runtime and native application dependencies; a separate .NET install is not required.
-- A recent Intel, AMD, or NVIDIA graphics driver is recommended.
-- On low-end hardware, use the Low-end / maximum performance preset, pixel-perfect scaling, and keep CRT/LCD effects and temporal blending disabled.
-
-Normal speed is a true emulation multiplier (0.5x / 1x / 2x), not just a render-loop delay. Holding Tab advances multiple emulated frames per presentation interval; choose the turbo multiplier (2x–16x) in Settings → General. The corner overlay reports **RENDER FPS** separately from **GAME FPS** and measured emulation speed, so a higher render counter is not mistaken for faster gameplay.
-
-The core renders at the Game Boy's native frame rate. The FPS counter measures application presentation/rendering and can vary with window composition, GPU drivers, V-Sync, and system load.
+- Windows 10/11 x64 for the native mGBA GBA backend.
+- OpenGL 3.3-compatible graphics driver.
+- The application bundles its .NET runtime and native mGBA core; a separate .NET install is not required.
+- Recent Intel, AMD, or NVIDIA graphics drivers are recommended.
+- No external BIOS file is required for the default mGBA HLE BIOS setup.
 
 ## Build from source
 
-This branch uses the MIT-licensed [GameboySharp emulator core](https://github.com/sokie/gameboy_sharp), pinned as a Git submodule.
+The GameboySharp core is pinned as a Git submodule. mGBA is pinned separately and built as a minimal core-only native library.
 
 ```powershell
-git clone --recurse-submodules --branch pocketgb-display-settings https://github.com/siddop422/Pixel-Lab.git PocketGB
+git clone --recurse-submodules https://github.com/siddop422/Pixel-Lab.git PocketGB
 cd PocketGB
+git clone https://github.com/mgba-emu/mgba.git third_party/mgba
+git -C third_party/mgba checkout 431935616c0e216d650b25b2ea0c0acccd359038
 pwsh ./scripts/Prepare.ps1
+pwsh ./scripts/Build-Mgba.ps1
 dotnet test ./vendor/GameboySharp/GameboySharp.sln -c Release
-dotnet publish ./vendor/GameboySharp/GameboySharp.csproj -c Release -r win-x64 --self-contained true -p:AssemblyName=PocketGB -p:Version=1.2.0 -o publish
+dotnet publish ./vendor/GameboySharp/GameboySharp.csproj -c Release -r win-x64 --self-contained true -p:AssemblyName=PocketGB -p:Version=1.3.0 -o publish
 ```
 
-To build the Windows installer, install Inno Setup 6 and run:
+The native mGBA core is MPL-2.0 licensed; its notice is included with the Windows output. No game ROMs or BIOS dumps are included.
 
-```powershell
-& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion="1.2.0" /DPublishDir="..\publish" .\install\PocketGB.iss
-```
+## Further technical notes
 
-## Stability and renderer roadmap
-
-See [STABILITY-AND-RENDER-BACKENDS.md](docs/STABILITY-AND-RENDER-BACKENDS.md) for the current CGB startup/timer fixes, recommended test-ROM suites, and the staged OpenGL/Vulkan plus CPU/GPU renderer plan. Vulkan is not advertised as available until a real Vulkan renderer is implemented and validated.
+- [GBA backend and compatibility](docs/GBA-BACKEND-AND-COMPATIBILITY.md)
+- [Stability and renderer backend roadmap](docs/STABILITY-AND-RENDER-BACKENDS.md)
 
 ## Credits and license
 
-The emulation engine is based on [sokie/gameboy_sharp](https://github.com/sokie/gameboy_sharp), licensed under the MIT License. Its copyright and license notice are preserved in `vendor/GameboySharp/LICENSE` and `THIRD-PARTY-NOTICES.md`.
+The GameboySharp emulation core is MIT-licensed; its license is preserved in `vendor/GameboySharp/LICENSE` and `THIRD-PARTY-NOTICES.md`. The mGBA native core is MPL-2.0-licensed and its notice is included in the Windows build output.
 
 PocketGB is an independent community project and is not affiliated with or endorsed by Nintendo.

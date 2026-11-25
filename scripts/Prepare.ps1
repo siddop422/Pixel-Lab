@@ -758,3 +758,6 @@ Write-Host "ZIP games now keep battery saves and save states beside the original
 
 # Apply real emulation-speed scheduling, turbo batching and the live FPS overlay.
 & (Join-Path $PSScriptRoot "Prepare.Performance.ps1")
+
+# Add the optional native mGBA GBA/GB multi-system backend and its managed host.
+& (Join-Path $PSScriptRoot "Prepare.Mgba.ps1")
