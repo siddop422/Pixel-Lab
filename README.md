@@ -6,12 +6,12 @@ PocketGB is a lightweight Windows desktop emulator for Nintendo Game Boy, Game B
 
 ## Latest Windows build
 
-The current release is **PocketGB 1.4.0**. Download the [Windows installer](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.4.0/PocketGB-Setup-1.4.0.exe), [portable ZIP](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.4.0/PocketGB-Portable-1.4.0.zip), or [Android APK](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.4.0/PocketGB-Android-arm64-1.4.0.apk). Verify Windows downloads with [SHA256SUMS.txt](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.4.0/SHA256SUMS.txt) and the APK with [SHA256-ANDROID.txt](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.4.0/SHA256-ANDROID.txt). See [all PocketGB releases](https://github.com/siddop422/Pixel-Lab/releases).
+The current release is **PocketGB 1.5.0**. Download the [Windows installer](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.5.0/PocketGB-Setup-1.5.0.exe), [portable ZIP](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.5.0/PocketGB-Portable-1.5.0.zip), or [Android APK](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.5.0/PocketGB-Android-1.5.0.apk). Verify Windows downloads with [SHA256SUMS.txt](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.5.0/SHA256SUMS.txt) and the APK with [SHA256-ANDROID.txt](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.5.0/SHA256-ANDROID.txt). See [all PocketGB releases](https://github.com/siddop422/Pixel-Lab/releases).
 
 | Download | What it is |
 | --- | --- |
-| **PocketGB-Setup-1.4.0.exe** | Windows 10/11 x64 installer. Installs per-user and upgrades the existing PocketGB installation. |
-| **PocketGB-Portable-1.4.0.zip** | Self-contained Windows x64 portable build. Extract and run `PocketGB.exe`. |
+| **PocketGB-Setup-1.5.0.exe** | Windows 10/11 x64 installer. Installs per-user and upgrades the existing PocketGB installation. |
+| **PocketGB-Portable-1.5.0.zip** | Self-contained Windows x64 portable build. Extract and run `PocketGB.exe`. |
 | **SHA256SUMS.txt / SHA256-ANDROID.txt** | SHA-256 hashes for Windows and Android downloads. |
 
 The installer retains the same application ID and install folder, so running a newer setup over PocketGB 1.2.0 upgrades that installation instead of creating a second app entry. User configuration and game saves remain separate from the application directory.
@@ -20,15 +20,15 @@ The installer retains the same application ID and install folder, so running a n
 
 ## Android APK
 
-PocketGB 1.4.0 also includes a native Android app for Android 6.0+ on 64-bit ARM phones and tablets. Download the [PocketGB Android APK](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.4.0/PocketGB-Android-arm64-1.4.0.apk) from the same release page.
+PocketGB 1.5.0 also includes a native Android app for Android 6.0+ on ARM64, ARMv7, x86_64 and x86 devices. Download the [PocketGB Android APK](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.5.0/PocketGB-Android-1.5.0.apk) from the same release page.
 
-The Android build uses the pinned native mGBA core for GB, GBC and GBA games, with a landscape display, touch D-pad/buttons, hardware-key input, Android file picker, stereo audio, pause/reset, speed/turbo, save states and battery saves. It supports `.gb`, `.gbc`, `.sgb`, `.gba` and ZIP archives containing one supported ROM. The first APK is `arm64-v8a` only; x86_64 emulators and 32-bit-only phones are not included.
+The Android build uses the pinned native mGBA core for GB, GBC and GBA games, with a landscape display, touch D-pad/buttons, hardware-key input, Android file picker, stereo audio, pause/reset, speed/turbo, save states and battery saves. It supports `.gb`, `.gbc`, `.sgb`, `.gba` and ZIP archives containing one supported ROM. The universal APK bundles mGBA native libraries for `arm64-v8a`, `armeabi-v7a`, `x86_64` and `x86`, so it can install on 64-bit/32-bit ARM phones and supported x86 Android emulators.
 
 Read the [Android install/build guide](android/README.md). The APK is signed for installation. For seamless updates across releases, configure a persistent signing key in GitHub Actions secrets; if CI uses its one-off fallback key, uninstall the older APK and back up its saves before installing a differently-signed future build.
 
-## What's new in 1.4.0
+## What's new in 1.5.0
 
-- Native mGBA core for Game Boy Advance, Game Boy and Game Boy Color on Windows x64 and Android arm64.
+- Native mGBA core for Game Boy Advance, Game Boy and Game Boy Color on Windows x64 and Android arm64, ARMv7, x86_64 and x86.
 - Emulation core selector: Auto, GameboySharp (GB/GBC), and mGBA (GB/GBC/GBA).
 - Auto prefers mGBA for `.gba`, `.gb`, `.gbc`, and `.sgb` files for broader compatibility; GameboySharp remains a selectable manual GB/GBC fallback.
 - GBA output at 240×160 with dynamic aspect-ratio scaling; GB/GBC output remains 160×144.
@@ -134,7 +134,7 @@ git -C third_party/mgba checkout 431935616c0e216d650b25b2ea0c0acccd359038
 pwsh ./scripts/Prepare.ps1
 pwsh ./scripts/Build-Mgba.ps1
 dotnet test ./vendor/GameboySharp/GameboySharp.sln -c Release
-dotnet publish ./vendor/GameboySharp/GameboySharp.csproj -c Release -r win-x64 --self-contained true -p:AssemblyName=PocketGB -p:Version=1.4.0 -o publish
+dotnet publish ./vendor/GameboySharp/GameboySharp.csproj -c Release -r win-x64 --self-contained true -p:AssemblyName=PocketGB -p:Version=1.5.0 -o publish
 ```
 
 The native mGBA core is MPL-2.0 licensed; its notice is included with the Windows output. No game ROMs or BIOS dumps are included.
