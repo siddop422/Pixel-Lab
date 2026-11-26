@@ -170,6 +170,16 @@ public sealed class CartridgeFileLoaderTests : IDisposable
     }
 
     [Fact]
+    public void DetectsSevenZipContainerRenamedToPak()
+    {
+        string path = Path.Combine(_root, "library-pak.pak");
+        File.WriteAllBytes(path, new byte[] { 0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C, 0x00 });
+
+        Assert.True(CartridgeFileLoader.IsSevenZipArchive(path));
+        Assert.Equal(path, CartridgeFileLoader.ResolveRomPath(path, _cache));
+    }
+
+    [Fact]
     public void FindsSidecarPatchesInBpsUpsIpsPriorityOrder()
     {
         string rom = Path.Combine(_root, "game.gba");
