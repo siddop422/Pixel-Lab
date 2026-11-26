@@ -58,7 +58,7 @@ jobs:
 
       - name: Compile mGBA core for Android arm64
         shell: bash
-        run: ./scripts/build-mgba-android.sh
+        run: bash ./scripts/build-mgba-android.sh
 
       - name: Publish Android APK
         shell: bash
