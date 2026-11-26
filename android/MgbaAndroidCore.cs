@@ -1,4 +1,4 @@
-using System.IO.Compression;
+using PocketGB.Shared;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -30,14 +30,47 @@ internal sealed class MgbaAndroidCore : IDisposable
     public void LoadRom(string path)
     {
         ThrowIfDisposed();
-        string resolved = ResolveRom(path);
-        SetSavePaths(resolved);
-        byte[] rom = File.ReadAllBytes(resolved);
-        if (rom.Length == 0 || rom.Length > 32 * 1024 * 1024)
-            throw new InvalidDataException("ROM size must be between 1 byte and 32 MiB.");
+        if (HasRom) SaveBattery(BatteryPath);
 
-        int result = pgb_mgba_load_rom(_context, rom, (nuint)rom.Length);
+        string fullSourcePath = Path.GetFullPath(path);
+        string cacheRoot = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "PocketGB", "rom-cache");
+        if (string.IsNullOrWhiteSpace(cacheRoot) || cacheRoot == Path.DirectorySeparatorChar.ToString())
+            cacheRoot = Path.Combine(Path.GetDirectoryName(fullSourcePath)!, "rom-cache");
+
+        string resolved = CartridgeFileLoader.ResolveRomPath(fullSourcePath, cacheRoot);
+        SetSavePaths(fullSourcePath);
+
+        int result;
+        if (CartridgeFileLoader.IsSevenZipArchive(resolved))
+        {
+            result = pgb_mgba_load_7z_file(_context, resolved);
+        }
+        else
+        {
+            byte[] rom = File.ReadAllBytes(resolved);
+            if (rom.Length == 0 || rom.Length > CartridgeFileLoader.MaxRomBytes)
+                throw new InvalidDataException("ROM size must be between 1 byte and 32 MiB.");
+            result = pgb_mgba_load_rom(_context, rom, (nuint)rom.Length);
+        }
+
         if (result == 0) throw new InvalidDataException(GetLastError());
+
+        try
+        {
+            string? patchPath = CartridgeFileLoader.FindSidecarPatch(fullSourcePath, resolved);
+            if (patchPath != null)
+            {
+                byte[] patch = File.ReadAllBytes(patchPath);
+                if (pgb_mgba_apply_patch(_context, patch, (nuint)patch.Length) == 0)
+                    global::Android.Util.Log.Warn("PocketGB", $"Could not apply sidecar patch {patchPath}: {GetLastError()}");
+            }
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Warn("PocketGB", $"Could not apply sidecar patch: {ex.Message}");
+        }
 
         Width = pgb_mgba_video_width(_context);
         Height = pgb_mgba_video_height(_context);
@@ -49,32 +82,6 @@ internal sealed class MgbaAndroidCore : IDisposable
         if (double.IsFinite(rate) && rate > 1 && rate < 240) FrameRate = rate;
         HasRom = true;
         LoadBatterySave();
-    }
-
-    private static string ResolveRom(string path)
-    {
-        string extension = Path.GetExtension(path).ToLowerInvariant();
-        if (extension != ".zip")
-        {
-            if (extension is not (".gb" or ".gbc" or ".sgb" or ".gba"))
-                throw new InvalidDataException("Unsupported game file. Choose GB, GBC, GBA or ZIP.");
-            return path;
-        }
-
-        using var archive = ZipFile.OpenRead(path);
-        var entry = archive.Entries
-            .Where(e => !string.IsNullOrEmpty(e.Name) && e.Length > 0 && e.Length <= 32 * 1024 * 1024)
-            .Where(e => Path.GetExtension(e.Name).ToLowerInvariant() is ".gba" or ".gbc" or ".gb" or ".sgb")
-            .OrderBy(e => e.FullName.Contains('/') || e.FullName.Contains('\\') ? 1 : 0)
-            .ThenBy(e => e.FullName, StringComparer.OrdinalIgnoreCase)
-            .FirstOrDefault();
-        if (entry == null) throw new InvalidDataException("This ZIP contains no supported GB, GBC or GBA ROM.");
-
-        string extracted = Path.Combine(Path.GetDirectoryName(path)!, Path.GetFileNameWithoutExtension(path) + "-" + Path.GetFileName(entry.Name));
-        using var input = entry.Open();
-        using var output = File.Create(extracted);
-        input.CopyTo(output);
-        return extracted;
     }
 
     public void RunFrame()
@@ -234,6 +241,10 @@ internal sealed class MgbaAndroidCore : IDisposable
         }
     }
 
+    [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
+    private static extern int pgb_mgba_load_7z_file(IntPtr context, [MarshalAs(UnmanagedType.LPUTF8Str)] string path);
+    [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
+    private static extern int pgb_mgba_apply_patch(IntPtr context, byte[] patch, nuint size);
     [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)] private static extern IntPtr pgb_mgba_create();
     [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)] private static extern void pgb_mgba_destroy(IntPtr context);
     [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)] private static extern IntPtr pgb_mgba_last_error(IntPtr context);
