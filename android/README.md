@@ -9,10 +9,10 @@ PocketGB Android is a native Android front end using the same pinned mGBA core a
 - Super Game Boy-tagged cartridges: `.sgb` (standard GB gameplay; SGB-specific border/controller enhancement rendering is not implemented)
 - Game Boy Advance: `.gba`
 - Raw cartridge image aliases: `.gbx`, `.agb`, `.dmg`, `.cgb`, `.bin`, `.rom` and `.pak`. The mGBA core validates the actual bytes; an extension does not make an arbitrary file a valid cartridge.
-- ZIP and 7z archives containing supported cartridges. ZIP containers renamed `.pak` are detected using the PKZIP signature; other PAK files are treated as raw ROM candidates.
+- ZIP and 7z archives containing supported cartridges. ZIP or 7z containers renamed `.pak` are detected using their file signatures; other PAK files are treated as raw ROM candidates.
 - IPS, UPS and BPS game patches can be selected with the PATCH toolbar action after opening a game. Windows desktop also detects sidecar patch files automatically.
 
-ROMs extracted from archives are selected deterministically by folder depth and filename. Nested 7z folders are searched by the native mGBA VFS reader.
+ROMs extracted from ZIP archives are selected deterministically by folder depth and filename. Nested 7z folders are searched by the native mGBA VFS reader in archive order.
 
 Raw cartridge images and extracted archive entries are limited to 32 MiB. ZIP, 7z and ZIP-based PAK containers are limited to 128 MiB. Individual patch files are limited to 32 MiB. RAR and proprietary game-engine PAK containers are not supported.
 
