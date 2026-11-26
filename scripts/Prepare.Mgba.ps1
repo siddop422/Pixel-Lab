@@ -488,6 +488,7 @@ $testPath = Join-Path $testDirectory "MgbaNativeSmokeTests.cs"
 $testSource = @'
 using System;
 using System.IO;
+using System.IO.Compression;
 using GameboySharp;
 using Xunit;
 
@@ -547,6 +548,68 @@ public sealed class MgbaNativeSmokeTests
         {
             if (File.Exists(path)) File.Delete(path);
             if (File.Exists(statePath)) File.Delete(statePath);
+            Environment.SetEnvironmentVariable("GBSHARP_AUDIO", null);
+        }
+    }
+
+    [Fact]
+    public void NativeCoreLoadsSyntheticGbCartridgeFromNestedZipAndSavesBesideArchive()
+    {
+        Environment.SetEnvironmentVariable("GBSHARP_AUDIO", "none");
+
+        byte[] rom = new byte[32 * 1024];
+        rom[0x100] = 0x18;
+        rom[0x101] = 0xFE;
+        rom[0x104] = 0xCE;
+        rom[0x105] = 0xED;
+        rom[0x106] = 0x66;
+        rom[0x107] = 0x66;
+        byte[] title = System.Text.Encoding.ASCII.GetBytes("PGB ZIP TEST");
+        Array.Copy(title, 0, rom, 0x134, title.Length);
+        rom[0x147] = 0x00;
+        rom[0x148] = 0x00;
+        rom[0x149] = 0x00;
+        byte checksum = 0;
+        for (int i = 0x134; i <= 0x14C; i++)
+            checksum = (byte)(checksum - rom[i] - 1);
+        rom[0x14D] = checksum;
+
+        string zipPath = Path.Combine(Path.GetTempPath(), $"pocketgb-gb-zip-{Guid.NewGuid():N}.zip");
+        string savePath = Path.ChangeExtension(zipPath, ".state0");
+        string? resolvedPath = null;
+        try
+        {
+            using (var archive = ZipFile.Open(zipPath, ZipArchiveMode.Create))
+            {
+                var entry = archive.CreateEntry("nested/game.gb", CompressionLevel.Optimal);
+                using var output = entry.Open();
+                output.Write(rom, 0, rom.Length);
+            }
+
+            resolvedPath = RomFileLoader.ResolveRomPath(zipPath);
+            using var core = new MgbaCore(new EmulatorConfig());
+            core.LoadRom(zipPath);
+
+            Assert.True(core.HasRom);
+            Assert.Equal("Game Boy / Color", core.PlatformName);
+            Assert.Equal(160, core.FrameWidth);
+            Assert.Equal(144, core.FrameHeight);
+            core.RunFrames(2);
+            core.SaveState();
+            Assert.True(File.Exists(savePath));
+            Assert.True(core.LoadState());
+        }
+        finally
+        {
+            if (File.Exists(zipPath)) File.Delete(zipPath);
+            if (File.Exists(savePath)) File.Delete(savePath);
+            if (!string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath))
+            {
+                string? cacheFolder = Path.GetDirectoryName(resolvedPath);
+                File.Delete(resolvedPath);
+                if (cacheFolder != null && Directory.Exists(cacheFolder) && !Directory.EnumerateFileSystemEntries(cacheFolder).Any())
+                    Directory.Delete(cacheFolder);
+            }
             Environment.SetEnvironmentVariable("GBSHARP_AUDIO", null);
         }
     }
