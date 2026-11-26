@@ -8,6 +8,7 @@ using Android.Views;
 using Android.Widget;
 using System.IO;
 using System.Security.Cryptography;
+using PocketGB.Shared;
 
 namespace PocketGB.Android;
 
@@ -22,7 +23,7 @@ public sealed class MainActivity : Activity
 {
     private const int OpenRomRequest = 4101;
     private const long MaxRomBytes = 32L * 1024L * 1024L;
-    private const long MaxZipBytes = 64L * 1024L * 1024L;
+    private const long MaxArchiveBytes = CartridgeFileLoader.MaxArchiveBytes;
     private EmulatorSurfaceView? _game;
     private Button? _pauseButton;
     private Button? _speedButton;
@@ -128,8 +129,8 @@ public sealed class MainActivity : Activity
             string displayName = GetDisplayName(data.Data) ?? $"game-{DateTime.UtcNow:yyyyMMdd-HHmmss}.rom";
             displayName = Path.GetFileName(displayName);
             string extension = Path.GetExtension(displayName).ToLowerInvariant();
-            if (extension is not (".gb" or ".gbc" or ".sgb" or ".gba" or ".zip"))
-                throw new InvalidDataException("Choose a .gb, .gbc, .sgb, .gba or .zip file.");
+            if (!CartridgeFileLoader.IsSupportedGameFileName(displayName))
+                throw new InvalidDataException("Choose a GB, GBC, SGB, GBA, GBX, BIN, ROM, PAK, ZIP or 7z game file.");
 
             string destination = ImportDocument(data.Data, displayName, extension);
             _game?.LoadRom(destination);
@@ -147,7 +148,7 @@ public sealed class MainActivity : Activity
         string romDirectory = Path.Combine(FilesDir!.AbsolutePath, "roms");
         Directory.CreateDirectory(romDirectory);
         string temporary = Path.Combine(romDirectory, $".import-{Guid.NewGuid():N}.tmp");
-        long limit = extension == ".zip" ? MaxZipBytes : MaxRomBytes;
+        long limit = extension is ".zip" or ".7z" ? MaxArchiveBytes : MaxRomBytes;
 
         try
         {
@@ -162,8 +163,8 @@ public sealed class MainActivity : Activity
                 {
                     copied += read;
                     if (copied > limit)
-                        throw new InvalidDataException(extension == ".zip"
-                            ? "ZIP archives must be 64 MiB or smaller."
+                        throw new InvalidDataException(extension is ".zip" or ".7z"
+                            ? "ZIP/7z archives must be 128 MiB or smaller."
                             : "ROM files must be 32 MiB or smaller.");
                     output.Write(buffer, 0, read);
                 }
