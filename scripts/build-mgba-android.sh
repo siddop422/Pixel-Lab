@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "\${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MGBA_SOURCE="$ROOT/third_party/mgba"
 NATIVE_SOURCE="$ROOT/native/mgba"
 BUILD_DIR="$ROOT/build/mgba-android-arm64"
@@ -12,8 +12,8 @@ if [[ ! -f "$MGBA_SOURCE/CMakeLists.txt" ]]; then
   exit 1
 fi
 
-NDK="\${ANDROID_NDK_HOME:-\${ANDROID_NDK_ROOT:-}}"
-if [[ -z "$NDK" && -n "\${ANDROID_HOME:-}" ]]; then
+NDK="${ANDROID_NDK_HOME:-${ANDROID_NDK_ROOT:-}}"
+if [[ -z "$NDK" && -n "${ANDROID_HOME:-}" ]]; then
   NDK="$(find "$ANDROID_HOME/ndk" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort -V | tail -n 1)"
 fi
 if [[ -z "$NDK" || ! -f "$NDK/build/cmake/android.toolchain.cmake" ]]; then
@@ -53,7 +53,7 @@ cmake -S "$NATIVE_SOURCE" -B "$BUILD_DIR" -G Ninja \
   -DBUILD_GLES2=OFF \
   -DBUILD_GLES3=OFF
 
-cmake --build "$BUILD_DIR" --target pocketgb_mgba --parallel "\${ANDROID_BUILD_JOBS:-2}"
+cmake --build "$BUILD_DIR" --target pocketgb_mgba --parallel "${ANDROID_BUILD_JOBS:-2}"
 
 LIBRARY="$OUTPUT_DIR/libpocketgb-mgba.so"
 if [[ ! -f "$LIBRARY" ]]; then
