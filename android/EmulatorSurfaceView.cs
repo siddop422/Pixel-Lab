@@ -307,9 +307,9 @@ internal sealed class EmulatorSurfaceView : SurfaceView, ISurfaceHolderCallback,
             _audioTrack?.Stop();
             _audioTrack?.Release();
             int rate = sampleRate > 8000 && sampleRate <= 96000 ? sampleRate : 48000;
-            int bufferBytes = AudioTrack.GetMinBufferSize(rate, ChannelOut.Stereo, Encoding.Pcm16bit);
+            int bufferBytes = AudioTrack.GetMinBufferSize(rate, ChannelConfiguration.Stereo, Encoding.Pcm16bit);
             bufferBytes = Math.Max(bufferBytes, rate / 5 * 4);
-            _audioTrack = new AudioTrack(global::Android.Media.Stream.Music, rate, ChannelOut.Stereo,
+            _audioTrack = new AudioTrack(global::Android.Media.Stream.Music, rate, ChannelConfiguration.Stereo,
                 Encoding.Pcm16bit, bufferBytes, AudioTrackMode.Stream);
             if (_audioTrack.State == AudioTrackState.Initialized) _audioTrack.Play();
         }
@@ -425,7 +425,7 @@ internal sealed class EmulatorSurfaceView : SurfaceView, ISurfaceHolderCallback,
         canvas.DrawCircle(cx, cy, radius, _paint);
         _paint.Color = Color.Argb(230, 15, 34, 27);
         _paint.TextSize = label.Length > 3 ? radius * 0.45f : radius * 0.85f;
-        _paint.Typeface = Typeface.Create("sans-serif-medium", TypefaceStyle.Bold);
+        _paint.SetTypeface(Typeface.Create("sans-serif-medium", TypefaceStyle.Bold));
         _paint.TextAlign = Paint.Align.Center;
         canvas.DrawText(label, cx, cy + _paint.TextSize * 0.34f, _paint);
     }
@@ -434,7 +434,7 @@ internal sealed class EmulatorSurfaceView : SurfaceView, ISurfaceHolderCallback,
     {
         _paint.Color = Color.Argb(215, 220, 240, 228);
         _paint.TextSize = Math.Max(14, canvas.Height * 0.025f);
-        _paint.Typeface = Typeface.Create("sans-serif-medium", TypefaceStyle.Normal));
+        _paint.SetTypeface(Typeface.Create("sans-serif-medium", TypefaceStyle.Normal));
         _paint.TextAlign = Paint.Align.Left;
         string title = string.IsNullOrWhiteSpace(_gameTitle) ? _status : _gameTitle;
         canvas.DrawText(title, canvas.Width * 0.025f, canvas.Height * 0.17f, _paint);
