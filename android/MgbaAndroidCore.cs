@@ -32,8 +32,11 @@ internal sealed class MgbaAndroidCore : IDisposable
         ThrowIfDisposed();
         string resolved = ResolveRom(path);
         SetSavePaths(resolved);
+        var romInfo = new FileInfo(resolved);
+        if (!romInfo.Exists || romInfo.Length == 0 || romInfo.Length > 32L * 1024L * 1024L)
+            throw new InvalidDataException("ROM size must be between 1 byte and 32 MiB.");
         byte[] rom = File.ReadAllBytes(resolved);
-        if (rom.Length == 0 || rom.Length > 32 * 1024 * 1024)
+        if (rom.LongLength > 32L * 1024L * 1024L)
             throw new InvalidDataException("ROM size must be between 1 byte and 32 MiB.");
 
         int result = pgb_mgba_load_rom(_context, rom, (nuint)rom.Length);
@@ -71,10 +74,31 @@ internal sealed class MgbaAndroidCore : IDisposable
         if (entry == null) throw new InvalidDataException("This ZIP contains no supported GB, GBC or GBA ROM.");
 
         string extracted = Path.Combine(Path.GetDirectoryName(path)!, Path.GetFileNameWithoutExtension(path) + "-" + Path.GetFileName(entry.Name));
-        using var input = entry.Open();
-        using var output = File.Create(extracted);
-        input.CopyTo(output);
-        return extracted;
+        string temporary = extracted + ".tmp";
+        try
+        {
+            using var input = entry.Open();
+            using var output = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None);
+            byte[] buffer = new byte[81920];
+            long copied = 0;
+            int read;
+            while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                copied += read;
+                if (copied > 32L * 1024L * 1024L)
+                    throw new InvalidDataException("The ROM inside this ZIP exceeds the 32 MiB safety limit.");
+                output.Write(buffer, 0, read);
+            }
+            if (copied != entry.Length)
+                throw new InvalidDataException("The ROM entry in this ZIP archive was incomplete or corrupt.");
+            output.Flush(true);
+            File.Move(temporary, extracted, true);
+            return extracted;
+        }
+        finally
+        {
+            if (File.Exists(temporary)) File.Delete(temporary);
+        }
     }
 
     public void RunFrame()
@@ -150,7 +174,10 @@ internal sealed class MgbaAndroidCore : IDisposable
     {
         ThrowIfDisposed();
         if (!HasRom || !File.Exists(path)) return false;
+        var info = new FileInfo(path);
+        if (!info.Exists || info.Length == 0 || info.Length > 64L * 1024L * 1024L) return false;
         byte[] bytes = File.ReadAllBytes(path);
+        if (bytes.Length == 0 || bytes.Length > 64 * 1024 * 1024) return false;
         if (pgb_mgba_load_state(_context, bytes, (nuint)bytes.Length) == 0) return false;
         Width = pgb_mgba_video_width(_context);
         Height = pgb_mgba_video_height(_context);
@@ -173,6 +200,8 @@ internal sealed class MgbaAndroidCore : IDisposable
     {
         string path = BatteryPath;
         if (!File.Exists(path)) return;
+        var info = new FileInfo(path);
+        if (!info.Exists || info.Length == 0 || info.Length > 16L * 1024L * 1024L) return;
         byte[] bytes = File.ReadAllBytes(path);
         if (bytes.Length == 0 || bytes.Length > 16 * 1024 * 1024) return;
         if (pgb_mgba_savedata_load(_context, bytes, (nuint)bytes.Length) == 0)
