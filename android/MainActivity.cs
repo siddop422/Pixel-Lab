@@ -148,7 +148,7 @@ public sealed class MainActivity : Activity
         string romDirectory = Path.Combine(FilesDir!.AbsolutePath, "roms");
         Directory.CreateDirectory(romDirectory);
         string temporary = Path.Combine(romDirectory, $".import-{Guid.NewGuid():N}.tmp");
-        long limit = extension is ".zip" or ".7z" ? MaxArchiveBytes : MaxRomBytes;
+        long limit = extension is ".zip" or ".7z" or ".pak" ? MaxArchiveBytes : MaxRomBytes;
 
         try
         {
@@ -163,8 +163,8 @@ public sealed class MainActivity : Activity
                 {
                     copied += read;
                     if (copied > limit)
-                        throw new InvalidDataException(extension is ".zip" or ".7z"
-                            ? "ZIP/7z archives must be 128 MiB or smaller."
+                        throw new InvalidDataException(extension is ".zip" or ".7z" or ".pak"
+                            ? "ZIP/7z/PAK containers must be 128 MiB or smaller."
                             : "ROM files must be 32 MiB or smaller.");
                     output.Write(buffer, 0, read);
                 }
