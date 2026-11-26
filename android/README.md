@@ -51,7 +51,7 @@ The native core is pinned to mGBA commit [431935616c0e216d650b25b2ea0c0acccd3590
 
 ## Installing the APK
 
-Download `PocketGB-Android-1.6.0.apk` from the [PocketGB v1.6.0 release](https://github.com/siddop422/Pixel-Lab/releases/tag/pocketgb-v1.5.0), enable Android's Install unknown apps permission for the browser/file manager used to open it, then install it. Open PocketGB and press OPEN to choose a ROM from Downloads or another document provider.
+Download `PocketGB-Android-1.6.0.apk` from the [PocketGB v1.6.0 release](https://github.com/siddop422/Pixel-Lab/releases/tag/pocketgb-v1.6.0), enable Android's Install unknown apps permission for the browser/file manager used to open it, then install it. Open PocketGB and press OPEN to choose a ROM from Downloads or another document provider.
 
 ## Signing and updates
 
