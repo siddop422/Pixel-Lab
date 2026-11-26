@@ -5,13 +5,14 @@
     <RootNamespace>PocketGB.Android</RootNamespace>
     <ApplicationId>com.blackspiderstudios.pocketgb</ApplicationId>
     <ApplicationTitle>PocketGB</ApplicationTitle>
-    <ApplicationVersion>5</ApplicationVersion>
-    <ApplicationDisplayVersion>1.4.0</ApplicationDisplayVersion>
+    <ApplicationVersion>6</ApplicationVersion>
+    <ApplicationDisplayVersion>1.5.0</ApplicationDisplayVersion>
     <SupportedOSPlatformVersion>23.0</SupportedOSPlatformVersion>
     <AndroidMinSdkVersion>23</AndroidMinSdkVersion>
     <AndroidTargetSdkVersion>36</AndroidTargetSdkVersion>
     <AndroidPackageFormat>apk</AndroidPackageFormat>
-    <RuntimeIdentifiers>android-arm64</RuntimeIdentifiers>
+    <RuntimeIdentifiers>android-arm;android-arm64;android-x86;android-x64</RuntimeIdentifiers>
+    <AndroidCreatePackagePerAbi>false</AndroidCreatePackagePerAbi>
     <AndroidStripNativeLibraries>true</AndroidStripNativeLibraries>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -24,6 +25,16 @@
     <AndroidNativeLibrary Include="../artifacts/native/android-arm64/libpocketgb-mgba.so">
       <Abi>arm64-v8a</Abi>
     </AndroidNativeLibrary>
+    <AndroidNativeLibrary Include="../artifacts/native/android-arm/libpocketgb-mgba.so">
+      <Abi>armeabi-v7a</Abi>
+    </AndroidNativeLibrary>
+    <AndroidNativeLibrary Include="../artifacts/native/android-x86/libpocketgb-mgba.so">
+      <Abi>x86</Abi>
+    </AndroidNativeLibrary>
+    <AndroidNativeLibrary Include="../artifacts/native/android-x64/libpocketgb-mgba.so">
+      <Abi>x86_64</Abi>
+    </AndroidNativeLibrary>
+
     <AndroidAsset Include="../artifacts/native/android-arm64/licenses/mGBA-MPL-2.0.txt"
                   Link="licenses/mGBA-MPL-2.0.txt" />
   </ItemGroup>
