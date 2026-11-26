@@ -45,13 +45,13 @@ jobs:
       - name: Install Android platform and native toolchain
         shell: bash
         run: |
-          sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
 
       - name: Install .NET 9
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 9.0.x
+          dotnet-version: 10.0.x
 
       - name: Install .NET Android workload
         run: dotnet workload install android
@@ -65,7 +65,7 @@ jobs:
         run: |
           dotnet publish android/PocketGB.Android.csproj \
             -c Release \
-            -f net9.0-android \
+            -f net10.0-android \
             -r android-arm64 \
             -p:AndroidPackageFormat=apk \
             -o publish/android
