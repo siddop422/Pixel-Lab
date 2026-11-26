@@ -339,7 +339,7 @@ internal sealed class EmulatorSurfaceView : SurfaceView, ISurfaceHolderCallback,
     private void RenderFrame()
     {
         if (!_surfaceReady || _disposed) return;
-        Android.Graphics.Canvas? canvas = null;
+        global::Android.Graphics.Canvas? canvas = null;
         try
         {
             canvas = Holder.LockCanvas();
@@ -385,7 +385,7 @@ internal sealed class EmulatorSurfaceView : SurfaceView, ISurfaceHolderCallback,
         }
     }
 
-    private void DrawTouchOverlay(Android.Graphics.Canvas canvas)
+    private void DrawTouchOverlay(global::Android.Graphics.Canvas canvas)
     {
         float w = canvas.Width, h = canvas.Height;
         uint touch;
@@ -418,7 +418,7 @@ internal sealed class EmulatorSurfaceView : SurfaceView, ISurfaceHolderCallback,
         return _paint;
     }
 
-    private void DrawTouchButton(Android.Graphics.Canvas canvas, float cx, float cy, float radius, string label, bool pressed)
+    private void DrawTouchButton(global::Android.Graphics.Canvas canvas, float cx, float cy, float radius, string label, bool pressed)
     {
         _paint.SetStyle(Paint.Style.Fill);
         _paint.Color = pressed ? Color.Argb(220, 125, 210, 163) : Color.Argb(135, 225, 235, 229);
@@ -430,7 +430,7 @@ internal sealed class EmulatorSurfaceView : SurfaceView, ISurfaceHolderCallback,
         canvas.DrawText(label, cx, cy + _paint.TextSize * 0.34f, _paint);
     }
 
-    private void DrawStatus(Android.Graphics.Canvas canvas)
+    private void DrawStatus(global::Android.Graphics.Canvas canvas)
     {
         _paint.Color = Color.Argb(215, 220, 240, 228);
         _paint.TextSize = Math.Max(14, canvas.Height * 0.025f);
