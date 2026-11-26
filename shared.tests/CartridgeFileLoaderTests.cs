@@ -44,6 +44,27 @@ public sealed class CartridgeFileLoaderTests : IDisposable
     }
 
     [Fact]
+    public void AcceptsRawPakNamedCartridgeWhenItIsNotAnArchive()
+    {
+        string path = Path.Combine(_root, "raw-dump.pak");
+        File.WriteAllBytes(path, new byte[] { 0x01, 0x02, 0x03, 0x04 });
+
+        Assert.Equal(path, CartridgeFileLoader.ResolveRomPath(path, _cache));
+    }
+
+    [Fact]
+    public void DetectsZipContainerRenamedToPakAndExtractsItsCartridge()
+    {
+        string path = Path.Combine(_root, "library.pak");
+        WriteArchive(path, ("games/title.gba", new byte[] { 0x96, 0xEA, 0x42 }));
+
+        string resolved = CartridgeFileLoader.ResolveRomPath(path, _cache);
+
+        Assert.EndsWith(".gba", resolved, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(new byte[] { 0x96, 0xEA, 0x42 }, File.ReadAllBytes(resolved));
+    }
+
+    [Fact]
     public void ResolvesZipRomAndPrefersRootThenAlphabeticalOrder()
     {
         string zip = CreateArchive(
