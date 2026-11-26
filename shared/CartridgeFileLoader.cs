@@ -105,25 +105,28 @@ public static class CartridgeFileLoader
         try
         {
             using Stream source = selected.Open();
-            using var output = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None);
-            byte[] buffer = new byte[81920];
-            long copied = 0;
-            int read;
-            while ((read = source.Read(buffer, 0, buffer.Length)) > 0)
+            using (var output = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None))
             {
-                copied += read;
-                if (copied > MaxRomBytes)
-                    throw new InvalidDataException("The ROM expands beyond the 32 MiB cartridge safety limit.");
-                output.Write(buffer, 0, read);
-            }
+                byte[] buffer = new byte[81920];
+                long copied = 0;
+                int read;
+                while ((read = source.Read(buffer, 0, buffer.Length)) > 0)
+                {
+                    copied += read;
+                    if (copied > MaxRomBytes)
+                        throw new InvalidDataException("The ROM expands beyond the 32 MiB cartridge safety limit.");
+                    output.Write(buffer, 0, read);
+                }
 
-            if (copied != selected.Length)
-                throw new InvalidDataException("The ROM entry in this ZIP is incomplete or corrupt.");
+                if (copied != selected.Length)
+                    throw new InvalidDataException("The ROM entry in this ZIP is incomplete or corrupt.");
+            }
         }
-        finally
+        catch
         {
             if (File.Exists(temporary))
                 File.Delete(temporary);
+            throw;
         }
 
         File.Move(temporary, destination, true);
