@@ -126,7 +126,7 @@ public sealed class MainActivity : Activity
             string displayName = GetDisplayName(data.Data) ?? $"game-{DateTime.UtcNow:yyyyMMdd-HHmmss}.rom";
             displayName = Path.GetFileName(displayName);
             if (!CartridgeFileLoader.IsSupportedGameFileName(displayName))
-                throw new InvalidDataException("Choose a GB, GBC, SGB, GBA, GBX, BIN, ROM, ZIP or 7z game file.");
+                throw new InvalidDataException("Choose a GB, GBC, SGB, GBA, GBX, BIN, ROM, PAK, ZIP or 7z game file.");
 
             string romDirectory = Path.Combine(FilesDir!.AbsolutePath, "roms");
             Directory.CreateDirectory(romDirectory);
