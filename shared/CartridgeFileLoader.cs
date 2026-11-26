@@ -52,6 +52,21 @@ public static class CartridgeFileLoader
         RomExtensions.Concat(new[] { ".zip", ".7z" }).ToArray();
 
     /// <summary>
+    /// Some game libraries use .pak as a raw ROM dump, while others simply rename a ZIP
+    /// container. Detect the latter by its PKZIP signature; otherwise mGBA validates it as raw ROM bytes.
+    /// </summary>
+    private static bool HasZipContainerSignature(string path)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        Span<byte> header = stackalloc byte[4];
+        int read = stream.Read(header);
+        return read == 4 && header[0] == 0x50 && header[1] == 0x4B &&
+               ((header[2] == 0x03 && header[3] == 0x04) ||
+                (header[2] == 0x05 && header[3] == 0x06) ||
+                (header[2] == 0x07 && header[3] == 0x08));
+    }
+
+    /// <summary>
     /// Returns a direct ROM unchanged, extracts a ROM from ZIP into a content-addressed cache,
     /// or leaves a 7z archive for mGBA's built-in LZMA/VFS reader.
     /// </summary>
@@ -75,7 +90,10 @@ public static class CartridgeFileLoader
             return fullPath;
         }
 
-        if (!extension.Equals(".zip", StringComparison.OrdinalIgnoreCase))
+        bool zipContainer = extension.Equals(".zip", StringComparison.OrdinalIgnoreCase) ||
+            (extension.Equals(".pak", StringComparison.OrdinalIgnoreCase) && HasZipContainerSignature(fullPath));
+
+        if (!zipContainer)
         {
             if (!IsSupportedRomExtension(extension))
             {
