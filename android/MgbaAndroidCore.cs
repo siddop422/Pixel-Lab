@@ -1,4 +1,4 @@
-using System.IO.Compression;
+using PocketGB.Shared;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -30,17 +30,52 @@ internal sealed class MgbaAndroidCore : IDisposable
     public void LoadRom(string path)
     {
         ThrowIfDisposed();
-        string resolved = ResolveRom(path);
-        SetSavePaths(resolved);
-        var romInfo = new FileInfo(resolved);
-        if (!romInfo.Exists || romInfo.Length == 0 || romInfo.Length > 32L * 1024L * 1024L)
-            throw new InvalidDataException("ROM size must be between 1 byte and 32 MiB.");
-        byte[] rom = File.ReadAllBytes(resolved);
-        if (rom.LongLength > 32L * 1024L * 1024L)
-            throw new InvalidDataException("ROM size must be between 1 byte and 32 MiB.");
+        if (HasRom) SaveBattery(BatteryPath);
+        HasRom = false;
+        GameTitle = "Loading game...";
 
-        int result = pgb_mgba_load_rom(_context, rom, (nuint)rom.Length);
+        string sourcePath = Path.GetFullPath(path);
+        string cacheDirectory = Path.Combine(
+            Path.GetDirectoryName(sourcePath)!,
+            "rom-cache");
+        string resolved = CartridgeFileLoader.ResolveRomPath(sourcePath, cacheDirectory);
+
+        // Save files stay next to the imported original (especially a ZIP), never inside its cache folder.
+        SetSavePaths(sourcePath);
+
+        int result;
+        if (CartridgeFileLoader.IsSevenZipArchive(resolved))
+        {
+            result = pgb_mgba_load_7z_file(_context, resolved);
+        }
+        else
+        {
+            var romInfo = new FileInfo(resolved);
+            if (!romInfo.Exists || romInfo.Length == 0 || romInfo.Length > CartridgeFileLoader.MaxRomBytes)
+                throw new InvalidDataException("ROM size must be between 1 byte and 32 MiB.");
+            byte[] rom = File.ReadAllBytes(resolved);
+            result = pgb_mgba_load_rom(_context, rom, (nuint)rom.Length);
+        }
+
         if (result == 0) throw new InvalidDataException(GetLastError());
+
+        // mGBA applies IPS/UPS/BPS patches itself. A bad optional sidecar does not block an otherwise valid ROM.
+        try
+        {
+            string? patchPath = CartridgeFileLoader.FindSidecarPatch(sourcePath, resolved);
+            if (patchPath != null)
+            {
+                byte[] patch = File.ReadAllBytes(patchPath);
+                if (pgb_mgba_apply_patch(_context, patch, (nuint)patch.Length) == 0)
+                    global::Android.Util.Log.Warn("PocketGB", $"Could not apply patch {patchPath}: {GetLastError()}");
+                else
+                    global::Android.Util.Log.Info("PocketGB", $"Applied patch {Path.GetFileName(patchPath)}");
+            }
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Warn("PocketGB", $"Could not read an optional patch: {ex.Message}");
+        }
 
         Width = pgb_mgba_video_width(_context);
         Height = pgb_mgba_video_height(_context);
@@ -52,53 +87,6 @@ internal sealed class MgbaAndroidCore : IDisposable
         if (double.IsFinite(rate) && rate > 1 && rate < 240) FrameRate = rate;
         HasRom = true;
         LoadBatterySave();
-    }
-
-    private static string ResolveRom(string path)
-    {
-        string extension = Path.GetExtension(path).ToLowerInvariant();
-        if (extension != ".zip")
-        {
-            if (extension is not (".gb" or ".gbc" or ".sgb" or ".gba"))
-                throw new InvalidDataException("Unsupported game file. Choose GB, GBC, GBA or ZIP.");
-            return path;
-        }
-
-        using var archive = ZipFile.OpenRead(path);
-        var entry = archive.Entries
-            .Where(e => !string.IsNullOrEmpty(e.Name) && e.Length > 0 && e.Length <= 32 * 1024 * 1024)
-            .Where(e => Path.GetExtension(e.Name).ToLowerInvariant() is ".gba" or ".gbc" or ".gb" or ".sgb")
-            .OrderBy(e => e.FullName.Contains('/') || e.FullName.Contains('\\') ? 1 : 0)
-            .ThenBy(e => e.FullName, StringComparer.OrdinalIgnoreCase)
-            .FirstOrDefault();
-        if (entry == null) throw new InvalidDataException("This ZIP contains no supported GB, GBC or GBA ROM.");
-
-        string extracted = Path.Combine(Path.GetDirectoryName(path)!, Path.GetFileNameWithoutExtension(path) + "-" + Path.GetFileName(entry.Name));
-        string temporary = extracted + ".tmp";
-        try
-        {
-            using var input = entry.Open();
-            using var output = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None);
-            byte[] buffer = new byte[81920];
-            long copied = 0;
-            int read;
-            while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
-            {
-                copied += read;
-                if (copied > 32L * 1024L * 1024L)
-                    throw new InvalidDataException("The ROM inside this ZIP exceeds the 32 MiB safety limit.");
-                output.Write(buffer, 0, read);
-            }
-            if (copied != entry.Length)
-                throw new InvalidDataException("The ROM entry in this ZIP archive was incomplete or corrupt.");
-            output.Flush(true);
-            File.Move(temporary, extracted, true);
-            return extracted;
-        }
-        finally
-        {
-            if (File.Exists(temporary)) File.Delete(temporary);
-        }
     }
 
     public void RunFrame()
@@ -200,12 +188,39 @@ internal sealed class MgbaAndroidCore : IDisposable
     {
         string path = BatteryPath;
         if (!File.Exists(path)) return;
-        var info = new FileInfo(path);
-        if (!info.Exists || info.Length == 0 || info.Length > 16L * 1024L * 1024L) return;
-        byte[] bytes = File.ReadAllBytes(path);
-        if (bytes.Length == 0 || bytes.Length > 16 * 1024 * 1024) return;
-        if (pgb_mgba_savedata_load(_context, bytes, (nuint)bytes.Length) == 0)
-            throw new InvalidDataException("The existing .sav file was rejected by mGBA.");
+        try
+        {
+            var info = new FileInfo(path);
+            if (!info.Exists || info.Length == 0 || info.Length > 16L * 1024L * 1024L)
+            {
+                QuarantineBatterySave(path, "empty or exceeds the 16 MiB safety limit");
+                return;
+            }
+
+            byte[] bytes = File.ReadAllBytes(path);
+            if (bytes.Length == 0 || bytes.Length > 16 * 1024 * 1024 ||
+                pgb_mgba_savedata_load(_context, bytes, (nuint)bytes.Length) == 0)
+                QuarantineBatterySave(path, "rejected by the active mGBA cartridge core");
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Warn("PocketGB", $"Could not load battery save {path}; the game will start with fresh save data: {ex.Message}");
+        }
+    }
+
+    private static void QuarantineBatterySave(string path, string reason)
+    {
+        if (!File.Exists(path)) return;
+        string backup = path + ".corrupt-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmssfff");
+        try
+        {
+            File.Move(path, backup);
+            global::Android.Util.Log.Warn("PocketGB", $"Preserved unreadable save at {backup}: {reason}");
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Warn("PocketGB", $"Could not quarantine unreadable save {path}: {ex.Message}");
+        }
     }
 
     public string BatteryPath { get; private set; } = string.Empty;
@@ -263,6 +278,10 @@ internal sealed class MgbaAndroidCore : IDisposable
         }
     }
 
+    [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
+    private static extern int pgb_mgba_load_7z_file(IntPtr context, [MarshalAs(UnmanagedType.LPUTF8Str)] string path);
+    [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
+    private static extern int pgb_mgba_apply_patch(IntPtr context, byte[] patch, nuint size);
     [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)] private static extern IntPtr pgb_mgba_create();
     [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)] private static extern void pgb_mgba_destroy(IntPtr context);
     [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)] private static extern IntPtr pgb_mgba_last_error(IntPtr context);
