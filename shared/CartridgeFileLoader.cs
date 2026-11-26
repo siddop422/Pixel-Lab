@@ -18,7 +18,7 @@ public static class CartridgeFileLoader
     private static readonly string[] RomExtensions =
     {
         ".gb", ".gbc", ".sgb", ".gba", ".gbx",
-        ".agb", ".dmg", ".cgb", ".bin", ".rom"
+        ".agb", ".dmg", ".cgb", ".bin", ".rom", ".pak"
     };
 
     private static readonly string[] PatchExtensions = { ".bps", ".ups", ".ips" };
@@ -80,7 +80,7 @@ public static class CartridgeFileLoader
             if (!IsSupportedRomExtension(extension))
             {
                 throw new InvalidDataException(
-                    "Supported games: GB, GBC, SGB, GBA, GBX, BIN and ROM images, or ZIP/7z archives.");
+                    "Supported games: GB, GBC, SGB, GBA, GBX, BIN, ROM and PAK raw cartridge images, or ZIP/7z archives.");
             }
 
             long directSize = new FileInfo(fullPath).Length;
@@ -103,7 +103,7 @@ public static class CartridgeFileLoader
             .ToList();
 
         if (candidates.Count == 0)
-            throw new InvalidDataException("This ZIP contains no supported GB, GBC, SGB, GBA or GBX cartridge under 32 MiB.");
+            throw new InvalidDataException("This ZIP contains no supported GB, GBC, SGB, GBA or GBX/PAK cartridge under 32 MiB.");
 
         ZipArchiveEntry selected = candidates[0];
         string archiveHash;
