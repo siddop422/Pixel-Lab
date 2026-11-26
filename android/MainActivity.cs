@@ -7,6 +7,7 @@ using Android.Provider;
 using Android.Views;
 using Android.Widget;
 using System.IO;
+using System.Security.Cryptography;
 
 namespace PocketGB.Android;
 
@@ -20,6 +21,8 @@ namespace PocketGB.Android;
 public sealed class MainActivity : Activity
 {
     private const int OpenRomRequest = 4101;
+    private const long MaxRomBytes = 32L * 1024L * 1024L;
+    private const long MaxZipBytes = 64L * 1024L * 1024L;
     private EmulatorSurfaceView? _game;
     private Button? _pauseButton;
     private Button? _speedButton;
@@ -128,16 +131,7 @@ public sealed class MainActivity : Activity
             if (extension is not (".gb" or ".gbc" or ".sgb" or ".gba" or ".zip"))
                 throw new InvalidDataException("Choose a .gb, .gbc, .sgb, .gba or .zip file.");
 
-            string romDirectory = Path.Combine(FilesDir!.AbsolutePath, "roms");
-            Directory.CreateDirectory(romDirectory);
-            string destination = Path.Combine(romDirectory, displayName);
-            using (Stream? input = ContentResolver!.OpenInputStream(data.Data))
-            {
-                if (input == null) throw new IOException("Android could not open that file.");
-                using var output = File.Create(destination);
-                input.CopyTo(output);
-            }
-
+            string destination = ImportDocument(data.Data, displayName, extension);
             _game?.LoadRom(destination);
             if (_pauseButton != null) _pauseButton.Text = "PAUSE";
             Toast.MakeText(this, $"Loaded {displayName}", ToastLength.Short)?.Show();
@@ -145,6 +139,54 @@ public sealed class MainActivity : Activity
         catch (Exception ex)
         {
             Toast.MakeText(this, ex.Message, ToastLength.Long)?.Show();
+        }
+    }
+
+    private string ImportDocument(global::Android.Net.Uri uri, string displayName, string extension)
+    {
+        string romDirectory = Path.Combine(FilesDir!.AbsolutePath, "roms");
+        Directory.CreateDirectory(romDirectory);
+        string temporary = Path.Combine(romDirectory, $".import-{Guid.NewGuid():N}.tmp");
+        long limit = extension == ".zip" ? MaxZipBytes : MaxRomBytes;
+
+        try
+        {
+            using (Stream? input = ContentResolver!.OpenInputStream(uri))
+            {
+                if (input == null) throw new IOException("Android could not open that file.");
+                using var output = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+                byte[] buffer = new byte[81920];
+                long copied = 0;
+                int read;
+                while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
+                {
+                    copied += read;
+                    if (copied > limit)
+                        throw new InvalidDataException(extension == ".zip"
+                            ? "ZIP archives must be 64 MiB or smaller."
+                            : "ROM files must be 32 MiB or smaller.");
+                    output.Write(buffer, 0, read);
+                }
+
+                if (copied == 0) throw new InvalidDataException("The selected file is empty.");
+                output.Flush(true);
+            }
+
+            string hash;
+            using (var input = File.OpenRead(temporary))
+            using (var sha = SHA256.Create())
+                hash = Convert.ToHexString(sha.ComputeHash(input)).ToLowerInvariant();
+
+            // Content-addressed names stop two different games with the same filename
+            // from overwriting each other's .sav and .state0 files.
+            string safeName = Path.GetFileName(displayName);
+            string destination = Path.Combine(romDirectory, $"{hash[..16]}-{safeName}");
+            File.Move(temporary, destination, true);
+            return destination;
+        }
+        finally
+        {
+            if (File.Exists(temporary)) File.Delete(temporary);
         }
     }
 
