@@ -128,6 +128,6 @@ jobs:
             - mGBA supports a broad set of common and uncommon GBA/GB cartridge types, but compatibility is not guaranteed for every game, mapper, peripheral or ROM hack.
             - Special GameboySharp ROM-size header codes 0x52, 0x53 and 0x54 remain handled.
 
-            Android: fullscreen landscape touch controls, Android document picker, native mGBA GB/GBC/GBA core, AudioTrack output, save states, battery saves, pause/reset and speed/turbo. The first APK supports arm64-v8a phones/tablets only; x86_64 Android emulators and 32-bit-only devices are not included.
+            Android: one APK with native mGBA GB/GBC/GBA libraries for arm64-v8a, armeabi-v7a, x86_64 and x86; fullscreen landscape touch controls, Android document picker, AudioTrack output, save states, battery saves, pause/reset and speed/turbo.
 
             Automated tests, the self-contained Windows publish, Inno Setup compilation and Android APK build/signature verification must pass before v1.5.0 is considered complete. The installer is not Authenticode-signed; use the checksums to verify file integrity and download only from this official GitHub release.
