@@ -30,16 +30,21 @@ public static class CartridgeFileLoader
         return RomExtensions.Contains(normalized, StringComparer.OrdinalIgnoreCase);
     }
 
-    public static bool IsSevenZipArchive(string? path) =>
-        !string.IsNullOrWhiteSpace(path) &&
-        Path.GetExtension(path).Equals(".7z", StringComparison.OrdinalIgnoreCase);
+    public static bool IsSevenZipArchive(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return false;
+        string extension = path.StartsWith(".", StringComparison.Ordinal)
+            ? path
+            : Path.GetExtension(path);
+        return extension.Equals(".7z", StringComparison.OrdinalIgnoreCase);
+    }
 
     public static bool IsSupportedGameFileName(string? fileName)
     {
         if (string.IsNullOrWhiteSpace(fileName)) return false;
         string extension = Path.GetExtension(fileName);
         return extension.Equals(".zip", StringComparison.OrdinalIgnoreCase) ||
-               IsSevenZipArchive(extension) ||
+               IsSevenZipArchive(fileName) ||
                IsSupportedRomExtension(extension);
     }
 
@@ -93,7 +98,7 @@ public static class CartridgeFileLoader
             .Where(entry => !string.IsNullOrEmpty(entry.Name))
             .Where(entry => IsSupportedRomExtension(Path.GetExtension(entry.Name)))
             .Where(entry => entry.Length > 0 && entry.Length <= MaxRomBytes)
-            .OrderBy(entry => entry.FullName.Count(ch => ch == '/' || ch == '\\\\'))
+            .OrderBy(entry => entry.FullName.Count(ch => ch == '/' || ch == (char)92))
             .ThenBy(entry => entry.FullName, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
@@ -106,7 +111,7 @@ public static class CartridgeFileLoader
             archiveHash = Convert.ToHexString(SHA256.HashData(input)).ToLowerInvariant();
 
         string cacheFolder = Path.Combine(Path.GetFullPath(cacheDirectory), archiveHash);
-        string safeName = Path.GetFileName(selected.FullName.Replace('\\\\', '/'));
+        string safeName = Path.GetFileName(selected.FullName.Replace((char)92, '/'));
         if (string.IsNullOrWhiteSpace(safeName)) safeName = "cartridge.gb";
         foreach (char invalid in Path.GetInvalidFileNameChars())
             safeName = safeName.Replace(invalid, '_');
