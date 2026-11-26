@@ -31,6 +31,8 @@ internal sealed class MgbaAndroidCore : IDisposable
     {
         ThrowIfDisposed();
         if (HasRom) SaveBattery(BatteryPath);
+        HasRom = false;
+        GameTitle = "Loading game...";
 
         string fullSourcePath = Path.GetFullPath(path);
         string cacheRoot = Path.Combine(
