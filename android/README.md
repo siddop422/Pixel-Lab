@@ -4,10 +4,10 @@ PocketGB Android is a native Android front end using the same pinned mGBA core a
 
 ## Supported cartridges and files
 
-- Game Boy: \`.gb\`
-- Game Boy Color: \`.gbc\`
-- Super Game Boy ROM files: \`.sgb\` (the game runs through the standard GB core; SGB border, palette and other SGB enhancement features are not implemented)
-- Game Boy Advance: \`.gba\`
+- Game Boy: `.gb`
+- Game Boy Color: `.gbc`
+- Super Game Boy ROM files: `.sgb` (the game runs through the standard GB core; SGB border, palette and other SGB enhancement features are not implemented)
+- Game Boy Advance: `.gba`
 - ZIP archives containing at least one supported ROM
 
 ZIP entries are selected deterministically by folder depth and filename. The extracted ROM must be 32 MiB or smaller; imported ZIP files are limited to 64 MiB. 7z and RAR are not supported. No commercial ROMs or BIOS dumps are included; mGBA's HLE BIOS defaults are used.
@@ -16,15 +16,15 @@ ZIP entries are selected deterministically by folder depth and filename. The ext
 
 - Android 6.0 (API 23) or newer.
 - One APK containing native libraries for all four Android ABIs:
-  - \`arm64-v8a\` — 64-bit ARM phones and tablets.
-  - \`armeabi-v7a\` — 32-bit ARM phones and tablets.
-  - \`x86_64\` — 64-bit x86 Android emulators and devices.
-  - \`x86\` — 32-bit x86 Android emulators and devices.
+  - `arm64-v8a` — 64-bit ARM phones and tablets.
+  - `armeabi-v7a` — 32-bit ARM phones and tablets.
+  - `x86_64` — 64-bit x86 Android emulators and devices.
+  - `x86` — 32-bit x86 Android emulators and devices.
 - Full-screen landscape play, touch D-pad, A/B, L/R, Start and Select buttons.
 - External keyboards and game controllers where Android reports standard key events.
 - Stereo AudioTrack output, pause, reset, speed, turbo, quick save and quick load.
 - Game ROMs are copied to app-private storage using content-addressed filenames so two different games with the same source filename do not overwrite each other's saves.
-- Battery saves (\`.sav\`) and quick states (\`.state0\`) are stored beside the app-private ROM copy.
+- Battery saves (`.sav`) and quick states (`.state0`) are stored beside the app-private ROM copy.
 
 The APK uses the .NET 10 Android runtime and native mGBA libraries built from the same pinned upstream revision as the Windows app. Including multiple ABIs increases the APK size compared with the previous arm64-only build, but avoids requiring users to guess which architecture-specific APK to download.
 
@@ -40,17 +40,17 @@ export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
 dotnet publish ./android/PocketGB.Android.csproj -c Release -f net10.0-android -p:AndroidPackageFormat=apk -o ./publish/android
 ~~~
 
-The build script compiles the core for each ABI declared in \`RuntimeIdentifiers\`; the project packages them into a single APK. CI checks that each expected \`lib/<abi>/libpocketgb-mgba.so\` exists in the signed APK and verifies the APK signature.
+The build script compiles the core for each ABI declared in `RuntimeIdentifiers`; the project packages them into a single APK. CI checks that each expected `lib/<abi>/libpocketgb-mgba.so` exists in the signed APK and verifies the APK signature.
 
 The native core is pinned to mGBA commit [431935616c0e216d650b25b2ea0c0acccd359038](https://github.com/mgba-emu/mgba/commit/431935616c0e216d650b25b2ea0c0acccd359038) and is licensed under MPL-2.0. The native licence file is packaged in the APK assets.
 
 ## Installing the APK
 
-Download \`PocketGB-Android-1.5.0.apk\` from the [PocketGB v1.5.0 release](https://github.com/siddop422/Pixel-Lab/releases/tag/pocketgb-v1.5.0), enable Android's Install unknown apps permission for the browser/file manager used to open it, then install it. Open PocketGB and press OPEN to choose a ROM from Downloads or another document provider.
+Download `PocketGB-Android-1.5.0.apk` from the [PocketGB v1.5.0 release](https://github.com/siddop422/Pixel-Lab/releases/tag/pocketgb-v1.5.0), enable Android's Install unknown apps permission for the browser/file manager used to open it, then install it. Open PocketGB and press OPEN to choose a ROM from Downloads or another document provider.
 
 ## Signing and updates
 
-The APK is signed so Android can install it. For repeatable upgrade installs, configure a persistent signing key in repository Actions secrets: \`ANDROID_KEYSTORE_BASE64\`, \`ANDROID_KEYSTORE_PASSWORD\`, \`ANDROID_KEY_ALIAS\`, and \`ANDROID_KEY_PASSWORD\`. If those secrets are absent, CI creates a one-off signing key; a later APK signed with a different key cannot update it in place. Back up saves before uninstalling an app signed with the one-off key.
+The APK is signed so Android can install it. For repeatable upgrade installs, configure a persistent signing key in repository Actions secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`. If those secrets are absent, CI creates a one-off signing key; a later APK signed with a different key cannot update it in place. Back up saves before uninstalling an app signed with the one-off key.
 
 ## Compatibility and validation
 
