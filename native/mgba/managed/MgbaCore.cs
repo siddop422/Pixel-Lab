@@ -4,6 +4,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using Serilog;
+using PocketGB.Shared;
 
 namespace GameboySharp;
 
@@ -114,14 +115,28 @@ internal sealed unsafe class MgbaCore : IDisposable
         if (HasRom) SaveBattery();
         HasRom = false;
         GameTitle = "(loading)";
-        string resolvedPath = RomFileLoader.ResolveRomPath(sourcePath);
-        byte[] rom = File.ReadAllBytes(resolvedPath);
+        string cacheRoot = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "PocketGB", "rom-cache");
+        if (string.IsNullOrWhiteSpace(cacheRoot) || cacheRoot == Path.DirectorySeparatorChar.ToString())
+            cacheRoot = Path.Combine(Path.GetTempPath(), "PocketGB", "rom-cache");
 
+        string resolvedPath = CartridgeFileLoader.ResolveRomPath(sourcePath, cacheRoot);
         int loaded;
-        unsafe
+        if (CartridgeFileLoader.IsSevenZipArchive(resolvedPath))
         {
-            fixed (byte* pointer = rom)
-                loaded = pgb_mgba_load_rom(_context, pointer, (nuint)rom.Length);
+            loaded = pgb_mgba_load_7z_file(_context, resolvedPath);
+        }
+        else
+        {
+            byte[] rom = File.ReadAllBytes(resolvedPath);
+            if (rom.Length == 0 || rom.Length > CartridgeFileLoader.MaxRomBytes)
+                throw new InvalidDataException("ROM size must be between 1 byte and 32 MiB.");
+            unsafe
+            {
+                fixed (byte* pointer = rom)
+                    loaded = pgb_mgba_load_rom(_context, pointer, (nuint)rom.Length);
+            }
         }
 
         if (loaded == 0)
@@ -129,6 +144,32 @@ internal sealed unsafe class MgbaCore : IDisposable
 
         _sourcePath = Path.GetFullPath(sourcePath);
         _resolvedRomPath = Path.GetFullPath(resolvedPath);
+
+        // Apply standard mGBA sidecar patches automatically. An invalid patch is reported,
+        // but the unpatched cartridge remains loaded so users can still launch the game.
+        try
+        {
+            string? patchPath = CartridgeFileLoader.FindSidecarPatch(_sourcePath, _resolvedRomPath);
+            if (patchPath != null)
+            {
+                byte[] patch = File.ReadAllBytes(patchPath);
+                unsafe
+                {
+                    fixed (byte* pointer = patch)
+                    {
+                        if (pgb_mgba_apply_patch(_context, pointer, (nuint)patch.Length) == 0)
+                            Log.Warning("Could not apply sidecar patch {Patch}: {Reason}", patchPath, GetLastError());
+                        else
+                            Log.Information("Applied mGBA sidecar patch {Patch}", patchPath);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Could not apply a sidecar patch for {Rom}; loading the unpatched game.", sourcePath);
+        }
+
         _batterySavePath = ResolveSavePath(".sav");
         _saveStatePath = ResolveSavePath(".state0");
 
@@ -484,6 +525,12 @@ internal sealed unsafe class MgbaCore : IDisposable
         _audioSink?.Dispose();
         _audioSink = null;
     }
+
+    [DllImport(NativeLibraryName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern int pgb_mgba_load_7z_file(IntPtr context, [MarshalAs(UnmanagedType.LPUTF8Str)] string path);
+
+    [DllImport(NativeLibraryName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern int pgb_mgba_apply_patch(IntPtr context, byte* patch, nuint patchBytes);
 
     [DllImport(NativeLibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern IntPtr pgb_mgba_create();
