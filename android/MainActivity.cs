@@ -172,7 +172,9 @@ public sealed class MainActivity : Activity
         {
             Window?.SetDecorFitsSystemWindows(false);
             Window?.InsetsController?.Hide(WindowInsets.Type.StatusBars() | WindowInsets.Type.NavigationBars());
-            Window?.InsetsController?.SystemBarsBehavior = (int)WindowInsetsControllerBehavior.ShowTransientBarsBySwipe;
+            var controller = Window?.InsetsController;
+            if (controller != null)
+                controller.SystemBarsBehavior = WindowInsetsControllerBehavior.ShowTransientBarsBySwipe;
         }
         else
         {
