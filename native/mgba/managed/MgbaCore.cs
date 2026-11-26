@@ -323,17 +323,45 @@ internal sealed unsafe class MgbaCore : IDisposable
         if (string.IsNullOrWhiteSpace(_batterySavePath) || !File.Exists(_batterySavePath))
             return;
 
-        byte[] data = File.ReadAllBytes(_batterySavePath);
-        if (data.Length == 0 || data.Length > 16 * 1024 * 1024)
-            throw new InvalidDataException("The cartridge battery save is empty or larger than the supported safety limit.");
-
-        unsafe
+        try
         {
-            fixed (byte* source = data)
+            byte[] data = File.ReadAllBytes(_batterySavePath);
+            if (data.Length == 0 || data.Length > 16 * 1024 * 1024)
             {
-                if (pgb_mgba_savedata_load(_context, source, (nuint)data.Length) == 0)
-                    throw new InvalidDataException("mGBA rejected the existing cartridge battery save.");
+                QuarantineBatterySave("empty or exceeds the 16 MiB safety limit");
+                return;
             }
+
+            unsafe
+            {
+                fixed (byte* source = data)
+                {
+                    if (pgb_mgba_savedata_load(_context, source, (nuint)data.Length) == 0)
+                    {
+                        QuarantineBatterySave("rejected by the active cartridge core");
+                        return;
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Could not load the existing battery save for {Game}; the cartridge will start with fresh save data.", GameTitle);
+        }
+    }
+
+    private void QuarantineBatterySave(string reason)
+    {
+        if (string.IsNullOrWhiteSpace(_batterySavePath) || !File.Exists(_batterySavePath)) return;
+        string backup = _batterySavePath + ".corrupt-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmssfff");
+        try
+        {
+            File.Move(_batterySavePath, backup);
+            Log.Warning("Preserved an unreadable battery save at {Backup} ({Reason}). Starting with fresh save data.", backup, reason);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Could not quarantine the unreadable battery save at {Path}.", _batterySavePath);
         }
     }
 
