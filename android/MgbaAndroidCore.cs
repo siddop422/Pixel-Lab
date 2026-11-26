@@ -89,6 +89,26 @@ internal sealed class MgbaAndroidCore : IDisposable
         LoadBatterySave();
     }
 
+    public void ApplyPatchFile(string path)
+    {
+        ThrowIfDisposed();
+        if (!HasRom) throw new InvalidOperationException("Open a game before applying a patch.");
+        string fullPath = Path.GetFullPath(path);
+        string extension = Path.GetExtension(fullPath).ToLowerInvariant();
+        if (extension is not (".ips" or ".ups" or ".bps"))
+            throw new InvalidDataException("Choose an IPS, UPS or BPS patch.");
+        var info = new FileInfo(fullPath);
+        if (!info.Exists || info.Length == 0 || info.Length > CartridgeFileLoader.MaxRomBytes)
+            throw new InvalidDataException("Patch files must be between 1 byte and 32 MiB.");
+        byte[] patch = File.ReadAllBytes(fullPath);
+        if (pgb_mgba_apply_patch(_context, patch, (nuint)patch.Length) == 0)
+            throw new InvalidDataException(GetLastError());
+        Width = pgb_mgba_video_width(_context);
+        Height = pgb_mgba_video_height(_context);
+        EnsurePixels();
+        global::Android.Util.Log.Info("PocketGB", $"Applied {extension} patch {Path.GetFileName(fullPath)}");
+    }
+
     public void RunFrame()
     {
         if (!HasRom) return;
