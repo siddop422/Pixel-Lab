@@ -607,7 +607,7 @@ public sealed class MgbaNativeSmokeTests
             {
                 string? cacheFolder = Path.GetDirectoryName(resolvedPath);
                 File.Delete(resolvedPath);
-                if (cacheFolder != null && Directory.Exists(cacheFolder) && !Directory.EnumerateFileSystemEntries(cacheFolder).Any())
+                if (cacheFolder != null && Directory.Exists(cacheFolder) && !Directory.GetFileSystemEntries(cacheFolder).Length == 0)
                     Directory.Delete(cacheFolder);
             }
             Environment.SetEnvironmentVariable("GBSHARP_AUDIO", null);
