@@ -438,12 +438,12 @@ Write-Host "mGBA command-line routing and unified GB/GBA frame scheduler prepare
 # Use one shared extension policy for file browsing, drag/drop and the managed resolver.
 $fileBrowserPath = Join-Path $vendor "UI/FileBrowser.cs"
 $fileBrowser = [System.IO.File]::ReadAllText($fileBrowserPath)
-$fileBrowser = Replace-ExactlyOnce $fileBrowser 'private static readonly string[] RomExtensions = { ".gb", ".gbc", ".sgb", ".zip", ".gba" };' 'private static readonly string[] RomExtensions = { ".gb", ".gbc", ".sgb", ".gba", ".gbx", ".agb", ".dmg", ".cgb", ".bin", ".rom", ".zip", ".7z" };' "expanded game file filter"
+$fileBrowser = Replace-ExactlyOnce $fileBrowser '        private static readonly string[] RomExtensions = { ".gb", ".gbc", ".sgb", ".zip", ".gba" };' 'private static readonly string[] RomExtensions = { ".gb", ".gbc", ".sgb", ".gba", ".gbx", ".agb", ".dmg", ".cgb", ".bin", ".rom", ".zip", ".7z" };' "expanded game file filter"
 [System.IO.File]::WriteAllText($fileBrowserPath, $fileBrowser, [System.Text.UTF8Encoding]::new($false))
 
 $windowPath = Join-Path $vendor "UI/GameWindow.cs"
 $window = [System.IO.File]::ReadAllText($windowPath)
-$window = Replace-ExactlyOnce $window 'if (extension is ".gb" or ".gbc" or ".sgb" or ".zip" or ".gba")' 'if (extension is ".gb" or ".gbc" or ".sgb" or ".gba" or ".gbx" or ".agb" or ".dmg" or ".cgb" or ".bin" or ".rom" or ".zip" or ".7z")' "expanded drag and drop routing"
+$window = Replace-ExactlyOnce $window '                if (extension is ".gb" or ".gbc" or ".sgb" or ".zip" or ".gba")' 'if (extension is ".gb" or ".gbc" or ".sgb" or ".gba" or ".gbx" or ".agb" or ".dmg" or ".cgb" or ".bin" or ".rom" or ".zip" or ".7z")' "expanded drag and drop routing"
 [System.IO.File]::WriteAllText($windowPath, $window, [System.Text.UTF8Encoding]::new($false))
 
 # Replace the older desktop-only resolver with the shared implementation used by Android too.
