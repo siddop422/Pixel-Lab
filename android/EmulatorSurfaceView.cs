@@ -307,7 +307,7 @@ internal sealed class EmulatorSurfaceView : SurfaceView, ISurfaceHolderCallback,
             _audioTrack?.Stop();
             _audioTrack?.Release();
             int rate = sampleRate > 8000 && sampleRate <= 96000 ? sampleRate : 48000;
-            int bufferBytes = AudioTrack.GetMinBufferSize(rate, ChannelConfiguration.Stereo, Encoding.Pcm16bit);
+            int bufferBytes = AudioTrack.GetMinBufferSize(rate, ChannelOut.Stereo, Encoding.Pcm16bit);
             bufferBytes = Math.Max(bufferBytes, rate / 5 * 4);
             _audioTrack = new AudioTrack(global::Android.Media.Stream.Music, rate, ChannelConfiguration.Stereo,
                 Encoding.Pcm16bit, bufferBytes, AudioTrackMode.Stream);
