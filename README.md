@@ -116,7 +116,7 @@ Gamepad D-pad, face buttons, Start/Back and shoulder/trigger buttons are mapped 
 ## Requirements
 
 - Windows 10/11 x64 for the desktop app.
-- Android 6.0+ (API 23+) on 64-bit ARM (arm64-v8a) for the Android APK.
+- Android 6.0+ (API 23+) on ARM64 (`arm64-v8a`), 32-bit ARM (`armeabi-v7a`), x86_64 or x86 for the universal APK.
 - OpenGL 3.3-compatible graphics driver.
 - The application bundles its .NET runtime and native mGBA core; a separate .NET install is not required.
 - Recent Intel, AMD, or NVIDIA graphics drivers are recommended.
