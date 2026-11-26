@@ -147,7 +147,7 @@ internal sealed class EmulatorSurfaceView : SurfaceView, ISurfaceHolderCallback,
             Keycode.A or Keycode.ButtonL1 => 1u << 9,
             Keycode.S or Keycode.ButtonR1 => 1u << 8,
             Keycode.Enter or Keycode.ButtonStart => 1u << 3,
-            Keycode.Back or Keycode.ButtonSelect => 1u << 2,
+            Keycode.ButtonSelect or Keycode.Backspace => 1u << 2,
             _ => 0u
         };
         if (bit == 0) return false;
@@ -243,7 +243,7 @@ internal sealed class EmulatorSurfaceView : SurfaceView, ISurfaceHolderCallback,
         var timer = Stopwatch.StartNew();
         long last = Stopwatch.GetTimestamp();
         double accumulator = 0;
-        int[] displayPixels = EnsurePixelBuffer(256 * 224);
+        _ = EnsurePixelBuffer(256 * 224);
 
         while (!_stop)
         {
@@ -253,8 +253,12 @@ internal sealed class EmulatorSurfaceView : SurfaceView, ISurfaceHolderCallback,
             bool runFrame = false;
             int framesToRun = 0;
             double fps = 59.7275;
+            uint keys;
+            lock (_inputLock) keys = _touchKeys | _hardwareKeys;
+
             lock (_coreLock)
             {
+                _core.SetKeys(keys);
                 if (_core.HasRom && !_paused)
                 {
                     double multiplier = _turbo ? 4.0 : _speed;
@@ -353,7 +357,7 @@ internal sealed class EmulatorSurfaceView : SurfaceView, ISurfaceHolderCallback,
                         _bitmap = Bitmap.CreateBitmap(_core.Width, _core.Height, Bitmap.Config.Argb8888);
                     }
                     _bitmap!.SetPixels(_bitmapPixels, 0, _core.Width, 0, 0, _core.Width, _core.Height);
-                    float areaTop = canvas.Height * 0.08f;
+                    float areaTop = canvas.Height * 0.14f;
                     float areaBottom = canvas.Height * 0.94f;
                     float scale = Math.Min(canvas.Width / (float)_core.Width,
                         (areaBottom - areaTop) / _core.Height);
@@ -434,9 +438,9 @@ internal sealed class EmulatorSurfaceView : SurfaceView, ISurfaceHolderCallback,
         _paint.Typeface = Typeface.Create("sans-serif-medium", TypefaceStyle.Normal);
         _paint.TextAlign = Paint.Align.Left;
         string title = string.IsNullOrWhiteSpace(_gameTitle) ? _status : _gameTitle;
-        canvas.DrawText(title, canvas.Width * 0.025f, canvas.Height * 0.12f, _paint);
+        canvas.DrawText(title, canvas.Width * 0.025f, canvas.Height * 0.17f, _paint);
         _paint.TextAlign = Paint.Align.Right;
-        canvas.DrawText($"GAME {_gameFps:0.0} FPS  •  RENDER 60", canvas.Width * 0.975f, canvas.Height * 0.12f, _paint);
+        canvas.DrawText($"GAME {_gameFps:0.0} FPS  •  RENDER 60", canvas.Width * 0.975f, canvas.Height * 0.17f, _paint);
         if (!string.IsNullOrWhiteSpace(_status) && !_core.HasRom)
         {
             _paint.TextAlign = Paint.Align.Center;
