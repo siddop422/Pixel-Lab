@@ -4,6 +4,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using Serilog;
+using PocketGB.Shared;
 
 namespace GameboySharp;
 
@@ -114,14 +115,28 @@ internal sealed unsafe class MgbaCore : IDisposable
         if (HasRom) SaveBattery();
         HasRom = false;
         GameTitle = "(loading)";
-        string resolvedPath = RomFileLoader.ResolveRomPath(sourcePath);
-        byte[] rom = File.ReadAllBytes(resolvedPath);
+        string cacheRoot = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "PocketGB", "rom-cache");
+        if (string.IsNullOrWhiteSpace(cacheRoot) || cacheRoot == Path.DirectorySeparatorChar.ToString())
+            cacheRoot = Path.Combine(Path.GetTempPath(), "PocketGB", "rom-cache");
 
+        string resolvedPath = CartridgeFileLoader.ResolveRomPath(sourcePath, cacheRoot);
         int loaded;
-        unsafe
+        if (CartridgeFileLoader.IsSevenZipArchive(resolvedPath))
         {
-            fixed (byte* pointer = rom)
-                loaded = pgb_mgba_load_rom(_context, pointer, (nuint)rom.Length);
+            loaded = pgb_mgba_load_7z_file(_context, resolvedPath);
+        }
+        else
+        {
+            byte[] rom = File.ReadAllBytes(resolvedPath);
+            if (rom.Length == 0 || rom.Length > CartridgeFileLoader.MaxRomBytes)
+                throw new InvalidDataException("ROM size must be between 1 byte and 32 MiB.");
+            unsafe
+            {
+                fixed (byte* pointer = rom)
+                    loaded = pgb_mgba_load_rom(_context, pointer, (nuint)rom.Length);
+            }
         }
 
         if (loaded == 0)
@@ -129,6 +144,32 @@ internal sealed unsafe class MgbaCore : IDisposable
 
         _sourcePath = Path.GetFullPath(sourcePath);
         _resolvedRomPath = Path.GetFullPath(resolvedPath);
+
+        // Apply standard mGBA sidecar patches automatically. An invalid patch is reported,
+        // but the unpatched cartridge remains loaded so users can still launch the game.
+        try
+        {
+            string? patchPath = CartridgeFileLoader.FindSidecarPatch(_sourcePath, _resolvedRomPath);
+            if (patchPath != null)
+            {
+                byte[] patch = File.ReadAllBytes(patchPath);
+                unsafe
+                {
+                    fixed (byte* pointer = patch)
+                    {
+                        if (pgb_mgba_apply_patch(_context, pointer, (nuint)patch.Length) == 0)
+                            Log.Warning("Could not apply sidecar patch {Patch}: {Reason}", patchPath, GetLastError());
+                        else
+                            Log.Information("Applied mGBA sidecar patch {Patch}", patchPath);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Could not apply a sidecar patch for {Rom}; loading the unpatched game.", sourcePath);
+        }
+
         _batterySavePath = ResolveSavePath(".sav");
         _saveStatePath = ResolveSavePath(".state0");
 
@@ -282,17 +323,45 @@ internal sealed unsafe class MgbaCore : IDisposable
         if (string.IsNullOrWhiteSpace(_batterySavePath) || !File.Exists(_batterySavePath))
             return;
 
-        byte[] data = File.ReadAllBytes(_batterySavePath);
-        if (data.Length == 0 || data.Length > 16 * 1024 * 1024)
-            throw new InvalidDataException("The cartridge battery save is empty or larger than the supported safety limit.");
-
-        unsafe
+        try
         {
-            fixed (byte* source = data)
+            byte[] data = File.ReadAllBytes(_batterySavePath);
+            if (data.Length == 0 || data.Length > 16 * 1024 * 1024)
             {
-                if (pgb_mgba_savedata_load(_context, source, (nuint)data.Length) == 0)
-                    throw new InvalidDataException("mGBA rejected the existing cartridge battery save.");
+                QuarantineBatterySave("empty or exceeds the 16 MiB safety limit");
+                return;
             }
+
+            unsafe
+            {
+                fixed (byte* source = data)
+                {
+                    if (pgb_mgba_savedata_load(_context, source, (nuint)data.Length) == 0)
+                    {
+                        QuarantineBatterySave("rejected by the active cartridge core");
+                        return;
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Could not load the existing battery save for {Game}; the cartridge will start with fresh save data.", GameTitle);
+        }
+    }
+
+    private void QuarantineBatterySave(string reason)
+    {
+        if (string.IsNullOrWhiteSpace(_batterySavePath) || !File.Exists(_batterySavePath)) return;
+        string backup = _batterySavePath + ".corrupt-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmssfff");
+        try
+        {
+            File.Move(_batterySavePath, backup);
+            Log.Warning("Preserved an unreadable battery save at {Backup} ({Reason}). Starting with fresh save data.", backup, reason);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Could not quarantine the unreadable battery save at {Path}.", _batterySavePath);
         }
     }
 
@@ -484,6 +553,12 @@ internal sealed unsafe class MgbaCore : IDisposable
         _audioSink?.Dispose();
         _audioSink = null;
     }
+
+    [DllImport(NativeLibraryName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern int pgb_mgba_load_7z_file(IntPtr context, [MarshalAs(UnmanagedType.LPUTF8Str)] string path);
+
+    [DllImport(NativeLibraryName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern int pgb_mgba_apply_patch(IntPtr context, byte* patch, nuint patchBytes);
 
     [DllImport(NativeLibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern IntPtr pgb_mgba_create();
