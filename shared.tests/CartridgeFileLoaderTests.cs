@@ -26,6 +26,7 @@ public sealed class CartridgeFileLoaderTests : IDisposable
     [InlineData(".cgb")]
     [InlineData(".bin")]
     [InlineData(".rom")]
+    [InlineData(".pak")]
     [InlineData(".zip")]
     [InlineData(".7z")]
     public void RecognizesSupportedCartridgeAndArchiveExtensions(string extension)
@@ -80,6 +81,37 @@ public sealed class CartridgeFileLoaderTests : IDisposable
 
         Assert.NotEqual(first, second);
         Assert.Equal(new byte[] { 4, 5, 6 }, File.ReadAllBytes(second));
+    }
+
+    [Fact]
+    public void RejectsCorruptZipWithoutStartingTheEmulator()
+    {
+        string path = Path.Combine(_root, "corrupt.zip");
+        File.WriteAllBytes(path, new byte[] { 0x50, 0x4B, 0x03, 0x04, 0xFF, 0x00, 0x11 });
+
+        Assert.Throws<InvalidDataException>(() => CartridgeFileLoader.ResolveRomPath(path, _cache));
+    }
+
+    [Fact]
+    public void RejectsOversizedDirectCartridgeBeforeReadingItIntoMemory()
+    {
+        string path = Path.Combine(_root, "oversized.gba");
+        using (var stream = File.Create(path))
+            stream.SetLength(CartridgeFileLoader.MaxRomBytes + 1);
+
+        Assert.Throws<InvalidDataException>(() => CartridgeFileLoader.ResolveRomPath(path, _cache));
+    }
+
+    [Fact]
+    public void RejectsOversizedUncompressedRomEntryInsideSmallZip()
+    {
+        string path = Path.Combine(_root, "zip-bomb.zip");
+        byte[] oversized = new byte[checked((int)CartridgeFileLoader.MaxRomBytes + 1)];
+        using (var archive = ZipFile.Open(path, ZipArchiveMode.Create))
+        using (Stream output = archive.CreateEntry("oversized.gba", CompressionLevel.Optimal).Open())
+            output.Write(oversized, 0, oversized.Length);
+
+        Assert.Throws<InvalidDataException>(() => CartridgeFileLoader.ResolveRomPath(path, _cache));
     }
 
     [Fact]
