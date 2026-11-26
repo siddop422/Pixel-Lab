@@ -29,10 +29,10 @@ The Android project is a standalone .NET 9 Android app; it does not reuse the Wi
 
 ~~~bash
 dotnet workload install android
-sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
 export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
 ./scripts/build-mgba-android.sh
-dotnet publish ./android/PocketGB.Android.csproj -c Release -f net9.0-android -r android-arm64 -p:AndroidPackageFormat=apk -o ./publish/android
+dotnet publish ./android/PocketGB.Android.csproj -c Release -f net10.0-android -r android-arm64 -p:AndroidPackageFormat=apk -o ./publish/android
 ~~~
 
 The native core is pinned to mGBA commit 431935616c0e216d650b25b2ea0c0acccd359038 and is licensed under MPL-2.0. The native licence file is also packaged in the APK assets.
