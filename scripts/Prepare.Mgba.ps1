@@ -216,12 +216,12 @@ $project = [System.IO.File]::ReadAllText($projectPath)
 # publish property also renames referenced projects, which makes NuGet restore ambiguous
 # once the shared PocketGB.Shared project is added.
 if (-not $project.Contains("<AssemblyName>")) {
-    $project = $project.Replace("</Project>", @'
+    $assemblyItem = @'
   <PropertyGroup>
     <AssemblyName>PocketGB</AssemblyName>
   </PropertyGroup>
-</Project>
-'@)
+'@
+    $project = $project.Replace("</Project>", $assemblyItem + [Environment]::NewLine + "</Project>")
 }
 
 if (-not $project.Contains("native/mgba/managed/*.cs")) {
