@@ -6,12 +6,17 @@ PocketGB Android is a native Android front end using the same pinned mGBA core a
 
 - Game Boy: `.gb`
 - Game Boy Color: `.gbc`
-- Super Game Boy ROM files: `.sgb` (the game runs through the standard GB core; SGB border, palette and other SGB enhancement features are not implemented)
+- Super Game Boy-tagged cartridges: `.sgb` (standard GB gameplay; SGB-specific border/controller enhancement rendering is not implemented)
 - Game Boy Advance: `.gba`
-- ZIP archives containing at least one supported ROM
+- Raw cartridge image aliases: `.gbx`, `.agb`, `.dmg`, `.cgb`, `.bin`, `.rom` and `.pak`. The mGBA core validates the actual bytes; an extension does not make an arbitrary file a valid cartridge.
+- ZIP and 7z archives containing supported cartridges. ZIP containers renamed `.pak` are detected using the PKZIP signature; other PAK files are treated as raw ROM candidates.
+- IPS, UPS and BPS game patches can be selected with the PATCH toolbar action after opening a game. Windows desktop also detects sidecar patch files automatically.
 
-ZIP entries are selected deterministically by folder depth and filename. The extracted ROM must be 32 MiB or smaller; imported ZIP files are limited to 64 MiB. 7z and RAR are not supported. No commercial ROMs or BIOS dumps are included; mGBA's HLE BIOS defaults are used.
+ROMs extracted from archives are selected deterministically by folder depth and filename. Nested 7z folders are searched by the native mGBA VFS reader.
 
+Raw cartridge images and extracted archive entries are limited to 32 MiB. ZIP, 7z and ZIP-based PAK containers are limited to 128 MiB. Individual patch files are limited to 32 MiB. RAR and proprietary game-engine PAK containers are not supported.
+
+No commercial ROMs or BIOS dumps are included; mGBA's HLE BIOS defaults are used.
 ## Android support
 
 - Android 6.0 (API 23) or newer.
