@@ -553,6 +553,62 @@ public sealed class MgbaNativeSmokeTests
     }
 
     [Fact]
+    public void NativeCoreAppliesIpsSidecarBeforeReportingGameTitle()
+    {
+        Environment.SetEnvironmentVariable("GBSHARP_AUDIO", "none");
+
+        byte[] rom = new byte[32 * 1024];
+        rom[0x100] = 0x18;
+        rom[0x101] = 0xFE;
+        rom[0x104] = 0xCE;
+        rom[0x105] = 0xED;
+        rom[0x106] = 0x66;
+        rom[0x107] = 0x66;
+        byte[] title = System.Text.Encoding.ASCII.GetBytes("PGB IPS TEST");
+        Array.Copy(title, 0, rom, 0x134, title.Length);
+        rom[0x147] = 0x00;
+        rom[0x148] = 0x00;
+        rom[0x149] = 0x00;
+        byte checksum = 0;
+        for (int i = 0x134; i <= 0x14C; i++)
+            checksum = (byte)(checksum - rom[i] - 1);
+        rom[0x14D] = checksum;
+
+        string path = Path.Combine(Path.GetTempPath(), $"pocketgb-gb-ips-{Guid.NewGuid():N}.gb");
+        string patchPath = Path.ChangeExtension(path, ".ips");
+        string statePath = Path.ChangeExtension(path, ".state0");
+        byte[] patch =
+        {
+            0x50, 0x41, 0x54, 0x43, 0x48, // PATCH
+            0x00, 0x01, 0x34,             // Offset 0x0134 (first title byte)
+            0x00, 0x01,                   // One byte
+            (byte)'X',
+            0x45, 0x4F, 0x46              // EOF
+        };
+
+        File.WriteAllBytes(path, rom);
+        File.WriteAllBytes(patchPath, patch);
+        try
+        {
+            using var core = new MgbaCore(new EmulatorConfig());
+            core.LoadRom(path);
+
+            Assert.True(core.HasRom);
+            Assert.StartsWith("XGB", core.GameTitle, StringComparison.Ordinal);
+            core.RunFrames(2);
+            core.SaveState();
+            Assert.True(core.LoadState());
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+            if (File.Exists(patchPath)) File.Delete(patchPath);
+            if (File.Exists(statePath)) File.Delete(statePath);
+            Environment.SetEnvironmentVariable("GBSHARP_AUDIO", null);
+        }
+    }
+
+    [Fact]
     public void NativeCoreLoadsSyntheticGbCartridgeFromNestedZipAndSavesBesideArchive()
     {
         Environment.SetEnvironmentVariable("GBSHARP_AUDIO", "none");
