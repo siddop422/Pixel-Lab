@@ -113,7 +113,7 @@ static int load_rom_file(PgbMgbaContext* ctx, struct VFile* rom_file) {
     ctx->core->getGameInfo(ctx->core, &info);
     snprintf(ctx->title, sizeof(ctx->title), "%s", info.title);
     snprintf(ctx->game_code, sizeof(ctx->game_code), "%s", info.code);
-    ctx->error[0] = '\\0';
+    ctx->error[0] = '\0';
     return 1;
 }
 
@@ -289,7 +289,7 @@ PGB_EXPORT int pgb_mgba_apply_patch(void* handle, const uint8_t* patch_data, siz
 
     ctx->core->reset(ctx->core);
     ctx->core->currentVideoSize(ctx->core, &ctx->video_width, &ctx->video_height);
-    ctx->error[0] = '\\0';
+    ctx->error[0] = '\0';
     return 1;
 }
 
