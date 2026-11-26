@@ -56,7 +56,6 @@ internal sealed class EmulatorSurfaceView : SurfaceView, ISurfaceHolderCallback,
         lock (_coreLock)
         {
             _core.LoadRom(path);
-            _core.SetSavePaths(path);
             _gameTitle = _core.GameTitle;
             _status = $"{_core.PlatformName} • {_gameTitle}";
             _paused = false;
