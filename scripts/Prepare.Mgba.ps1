@@ -684,8 +684,10 @@ public sealed class MgbaNativeSmokeTests
         }
     }
 
-    [Fact]
-    public void NativeCoreLoadsAndRunsSyntheticGbaCartridge()
+    [Theory]
+    [InlineData(".gba")]
+    [InlineData(".pak")]
+    public void NativeCoreLoadsAndRunsSyntheticGbaCartridge(string extension)
     {
         Environment.SetEnvironmentVariable("GBSHARP_AUDIO", "none");
 
@@ -712,7 +714,7 @@ public sealed class MgbaNativeSmokeTests
         byte[] code = System.Text.Encoding.ASCII.GetBytes("PGBA");
         Array.Copy(code, 0, rom, 0xAC, 4);
 
-        string path = Path.Combine(Path.GetTempPath(), $"pocketgb-mgba-smoke-{Guid.NewGuid():N}.gba");
+        string path = Path.Combine(Path.GetTempPath(), $"pocketgb-mgba-smoke-{Guid.NewGuid():N}{extension}");
         string statePath = Path.ChangeExtension(path, ".state0");
 
         File.WriteAllBytes(path, rom);
