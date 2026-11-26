@@ -27,6 +27,7 @@ $configureArgs = @(
     "-DBUILD_CINEMA=OFF",
     "-DENABLE_DEBUGGERS=OFF",
     "-DENABLE_SCRIPTING=OFF",
+    "-DUSE_LZMA=ON",
     "-DUSE_PTHREADS=OFF"
 )
 
