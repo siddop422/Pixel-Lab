@@ -48,6 +48,9 @@ jobs:
         shell: pwsh
         run: dotnet test ./vendor/GameboySharp/GameboySharp.sln -c Release
 
+      - name: Test shared cross-platform cartridge loader
+        run: dotnet test ./shared.tests/PocketGB.Shared.Tests.csproj -c Release --verbosity normal
+
       - name: Publish Windows x64
         shell: pwsh
         run: |
