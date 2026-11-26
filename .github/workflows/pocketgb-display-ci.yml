@@ -54,7 +54,7 @@ jobs:
       - name: Publish Windows x64
         shell: pwsh
         run: |
-          dotnet publish ./vendor/GameboySharp/GameboySharp.csproj -c Release -r win-x64 --self-contained true -p:AssemblyName=PocketGB -p:Version=1.6.0 -p:PublishReadyToRun=false -p:TieredPGO=true -p:DebugType=none -p:DebugSymbols=false -o ./publish
+          dotnet publish ./vendor/GameboySharp/GameboySharp.csproj -c Release -r win-x64 --self-contained true -p:Version=1.6.0 -p:PublishReadyToRun=false -p:TieredPGO=true -p:DebugType=none -p:DebugSymbols=false -o ./publish
           if ($LASTEXITCODE -ne 0) { throw "Publish failed." }
           if (-not (Test-Path ./publish/PocketGB.exe)) { throw "PocketGB.exe missing." }
 
