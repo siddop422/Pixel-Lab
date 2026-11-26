@@ -35,10 +35,10 @@ set(BUILD_SUITE OFF CACHE BOOL "" FORCE)
 set(BUILD_CINEMA OFF CACHE BOOL "" FORCE)
 set(ENABLE_DEBUGGERS OFF CACHE BOOL "" FORCE)
 set(ENABLE_SCRIPTING OFF CACHE BOOL "" FORCE)
+# Enable mGBA's bundled 7-Zip virtual filesystem reader on every target.
+set(USE_LZMA ON CACHE BOOL "" FORCE)
 if(ANDROID)
     set(USE_PTHREADS ON CACHE BOOL "" FORCE)
-# Enable mGBA's bundled 7-Zip virtual filesystem reader.
-set(USE_LZMA ON CACHE BOOL "" FORCE)
 else()
     set(USE_PTHREADS OFF CACHE BOOL "" FORCE)
 endif()
