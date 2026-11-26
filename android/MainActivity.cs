@@ -149,7 +149,7 @@ public sealed class MainActivity : Activity
         }
     }
 
-    private string? GetDisplayName(Android.Net.Uri uri)
+    private string? GetDisplayName(global::Android.Net.Uri uri)
     {
         ICursor? cursor = null;
         try
