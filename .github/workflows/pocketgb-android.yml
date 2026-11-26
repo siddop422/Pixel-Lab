@@ -55,6 +55,11 @@ jobs:
         run: ./scripts/build-mgba-android.sh
 
       - name: Publish PocketGB Android APK
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         shell: bash
         run: |
           dotnet publish ./android/PocketGB.Android.csproj \
@@ -114,9 +119,9 @@ jobs:
           retention-days: 30
 
       - name: Wait for the matching Windows release
-        if: "\${{ github.event_name == 'push' && startsWith(github.event.head_commit.message, 'release: PocketGB v1.4.0') }}"
+        if: "${{ github.event_name == 'push' && startsWith(github.event.head_commit.message, 'release: PocketGB v1.4.0') }}"
         env:
-          GH_TOKEN: \${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           API="https://api.github.com/repos/$GITHUB_REPOSITORY/releases/tags/pocketgb-v1.4.0"
@@ -133,7 +138,7 @@ jobs:
           exit 1
 
       - name: Attach APK to PocketGB v1.4.0 release
-        if: "\${{ github.event_name == 'push' && startsWith(github.event.head_commit.message, 'release: PocketGB v1.4.0') }}"
+        if: "${{ github.event_name == 'push' && startsWith(github.event.head_commit.message, 'release: PocketGB v1.4.0') }}"
         uses: softprops/action-gh-release@v2
         with:
           tag_name: pocketgb-v1.4.0
