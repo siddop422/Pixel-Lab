@@ -211,6 +211,19 @@ $window = $window.Substring(0, $loadStart) + $newLoadMethod + $window.Substring(
 # Include the managed adapters and built native DLL in the Windows app publish directory.
 $projectPath = Join-Path $vendor "GameboySharp.csproj"
 $project = [System.IO.File]::ReadAllText($projectPath)
+
+# Set the desktop executable name in this project only. Passing AssemblyName as a global
+# publish property also renames referenced projects, which makes NuGet restore ambiguous
+# once the shared PocketGB.Shared project is added.
+if (-not $project.Contains("<AssemblyName>")) {
+    $project = $project.Replace("</Project>", @'
+  <PropertyGroup>
+    <AssemblyName>PocketGB</AssemblyName>
+  </PropertyGroup>
+</Project>
+'@)
+}
+
 if (-not $project.Contains("native/mgba/managed/*.cs")) {
     $items = @'
   <ItemGroup>
