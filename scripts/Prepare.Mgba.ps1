@@ -448,6 +448,8 @@ $window = Replace-ExactlyOnce $window '                if (extension is ".gb" or
 
 # Replace the older desktop-only resolver with the shared implementation used by Android too.
 $sharedLoader = @'
+using System;
+using System.IO;
 using PocketGB.Shared;
 
 namespace GameboySharp;
