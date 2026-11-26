@@ -43,3 +43,19 @@ The release workflow must pass:
 - APK content check for `lib/arm64-v8a/libpocketgb-mgba.so`, `lib/armeabi-v7a/libpocketgb-mgba.so`, `lib/x86_64/libpocketgb-mgba.so` and `lib/x86/libpocketgb-mgba.so`.
 
 CI package validation is not a substitute for gameplay testing on physical devices. The release remains unsigned by Authenticode on Windows; verify published downloads using the provided checksums.
+
+## CI validation — completed before publication
+
+Pull request [#6](https://github.com/siddop422/Pixel-Lab/pull/6) was merged after both CI jobs passed.
+
+- Windows test suite: **93 passed, 0 failed, 7 skipped (100 total)**. The seven skipped tests depend on optional external ROM or CPU-vector datasets not bundled with the repository.
+- Windows x64: native mGBA build, self-contained publish, Inno Setup compile, portable ZIP creation and artifact upload passed.
+- Android: mGBA native libraries compiled for `arm64-v8a`, `armeabi-v7a`, `x86_64` and `x86`.
+- Android: .NET APK publish, `apksigner` verification and ZIP-content checks for all four `lib/<abi>/libpocketgb-mgba.so` paths passed.
+- CI produced a signed universal APK of approximately 16 MiB. CI package validation is not a physical-device gameplay test.
+- The seven skipped tests, SGB enhancement rendering and testing the named commercial ROM examples remain outside this CI run.
+
+Workflow runs:
+- [Windows build and test](https://github.com/siddop422/Pixel-Lab/actions/runs/45877689931)
+- [Android universal APK](https://github.com/siddop422/Pixel-Lab/actions/runs/45877690075)
+
