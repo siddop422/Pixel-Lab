@@ -25,6 +25,8 @@
 
 #define PGB_VIDEO_WIDTH_MAX 256u
 #define PGB_VIDEO_HEIGHT_MAX 224u
+#define PGB_MAX_ARCHIVE_DIRS 32u
+#define PGB_MAX_ARCHIVE_DEPTH 16u
 
 typedef struct PgbMgbaContext {
     struct mCore* core;
@@ -41,7 +43,8 @@ typedef struct PgbMgbaContext {
     char game_code[8];
     int platform;
 #if defined(ENABLE_VFS) && defined(ENABLE_DIRECTORIES)
-    struct VDir* archive_directory;
+    struct VDir* archive_directories[PGB_MAX_ARCHIVE_DIRS];
+    unsigned int archive_directory_count;
 #endif
 } PgbMgbaContext;
 
@@ -144,10 +147,11 @@ static void release_core(PgbMgbaContext* ctx) {
     ctx->rgba_video = NULL;
 
 #if defined(ENABLE_VFS) && defined(ENABLE_DIRECTORIES)
-    /* The core unloads its VFile first; only then is its parent archive safe to close. */
-    if (ctx->archive_directory) {
-        ctx->archive_directory->close(ctx->archive_directory);
-        ctx->archive_directory = NULL;
+    /* The core unloads its VFile first; close nested dirs from child back to archive root. */
+    while (ctx->archive_directory_count > 0) {
+        struct VDir* directory = ctx->archive_directories[--ctx->archive_directory_count];
+        ctx->archive_directories[ctx->archive_directory_count] = NULL;
+        if (directory) directory->close(directory);
     }
 #endif
 
@@ -214,27 +218,35 @@ PGB_EXPORT int pgb_mgba_load_rom(void* handle, const uint8_t* rom, size_t rom_by
  * is enabled in CMake. Iterate archive members and select a real GB/GBA cartridge
  * by header, never by a misleading filename suffix.
  */
-PGB_EXPORT int pgb_mgba_load_7z_file(void* handle, const char* path) {
-    PgbMgbaContext* ctx = (PgbMgbaContext*)handle;
-    if (!ctx || !path || !path[0]) {
-        set_error(ctx, "A 7z archive path is required.");
-        return 0;
-    }
-
 #if defined(ENABLE_VFS) && defined(ENABLE_DIRECTORIES)
-    release_core(ctx);
-    ctx->archive_directory = VDirOpenArchive(path);
-    if (!ctx->archive_directory) {
-        set_error(ctx, "mGBA could not open this 7z archive. Check that it is not corrupt or password-protected.");
-        return 0;
-    }
+static struct VFile* find_cartridge_in_archive_directory(
+    PgbMgbaContext* ctx, struct VDir* directory, unsigned int depth) {
+    if (!ctx || !directory || depth > PGB_MAX_ARCHIVE_DEPTH) return NULL;
 
-    ctx->archive_directory->rewind(ctx->archive_directory);
+    directory->rewind(directory);
     struct VDirEntry* entry = NULL;
-    while ((entry = ctx->archive_directory->listNext(ctx->archive_directory))) {
-        if (!entry->name || !entry->type || entry->type(entry) == VFS_DIRECTORY) continue;
-        struct VFile* candidate = ctx->archive_directory->openFile(
-            ctx->archive_directory, entry->name(entry), O_RDONLY);
+    while ((entry = directory->listNext(directory))) {
+        if (!entry->name || !entry->type) continue;
+        const char* name = entry->name(entry);
+        if (!name || !name[0]) continue;
+
+        if (entry->type(entry) == VFS_DIRECTORY) {
+            /* Keep every ancestor VDir alive while an extracted VFile is in use by mGBA. */
+            if (!directory->openDir || ctx->archive_directory_count >= PGB_MAX_ARCHIVE_DIRS)
+                continue;
+            struct VDir* child = directory->openDir(directory, name);
+            if (!child) continue;
+            ctx->archive_directories[ctx->archive_directory_count++] = child;
+            struct VFile* nested = find_cartridge_in_archive_directory(ctx, child, depth + 1);
+            if (nested) return nested;
+
+            child->close(child);
+            ctx->archive_directories[--ctx->archive_directory_count] = NULL;
+            continue;
+        }
+
+        if (!directory->openFile) continue;
+        struct VFile* candidate = directory->openFile(directory, name, O_RDONLY);
         if (!candidate) continue;
 
         ssize_t size = candidate->size(candidate);
@@ -250,16 +262,46 @@ PGB_EXPORT int pgb_mgba_load_7z_file(void* handle, const char* path) {
             continue;
         }
 
-        if (!load_rom_file(ctx, candidate)) {
-            release_core(ctx);
-            return 0;
-        }
-        return 1;
+        return candidate;
     }
 
+    return NULL;
+}
+#endif
+
+/*
+ * mGBA's VFS layer provides the 7z reader (bundled LZMA decoder) when USE_LZMA
+ * is enabled in CMake. Search nested folders and select a real cartridge by header,
+ * rather than trusting a filename extension in an archive.
+ */
+PGB_EXPORT int pgb_mgba_load_7z_file(void* handle, const char* path) {
+    PgbMgbaContext* ctx = (PgbMgbaContext*)handle;
+    if (!ctx || !path || !path[0]) {
+        set_error(ctx, "A 7z archive path is required.");
+        return 0;
+    }
+
+#if defined(ENABLE_VFS) && defined(ENABLE_DIRECTORIES)
     release_core(ctx);
-    set_error(ctx, "This 7z archive contains no supported GB, GBC, SGB or GBA cartridge under 32 MiB.");
-    return 0;
+    struct VDir* root = VDirOpenArchive(path);
+    if (!root) {
+        set_error(ctx, "mGBA could not open this 7z archive. Check that it is not corrupt or password-protected.");
+        return 0;
+    }
+
+    ctx->archive_directories[ctx->archive_directory_count++] = root;
+    struct VFile* candidate = find_cartridge_in_archive_directory(ctx, root, 0);
+    if (!candidate) {
+        release_core(ctx);
+        set_error(ctx, "This 7z archive contains no supported GB, GBC, SGB or GBA cartridge under 32 MiB.");
+        return 0;
+    }
+
+    if (!load_rom_file(ctx, candidate)) {
+        release_core(ctx);
+        return 0;
+    }
+    return 1;
 #else
     set_error(ctx, "7z support was not enabled in this mGBA build.");
     return 0;
