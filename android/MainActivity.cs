@@ -7,6 +7,7 @@ using Android.Provider;
 using Android.Views;
 using Android.Widget;
 using System.IO;
+using PocketGB.Shared;
 
 namespace PocketGB.Android;
 
@@ -124,18 +125,31 @@ public sealed class MainActivity : Activity
         {
             string displayName = GetDisplayName(data.Data) ?? $"game-{DateTime.UtcNow:yyyyMMdd-HHmmss}.rom";
             displayName = Path.GetFileName(displayName);
-            string extension = Path.GetExtension(displayName).ToLowerInvariant();
-            if (extension is not (".gb" or ".gbc" or ".sgb" or ".gba" or ".zip"))
-                throw new InvalidDataException("Choose a .gb, .gbc, .sgb, .gba or .zip file.");
+            if (!CartridgeFileLoader.IsSupportedGameFileName(displayName))
+                throw new InvalidDataException("Choose a GB, GBC, SGB, GBA, GBX, BIN, ROM, ZIP or 7z game file.");
 
             string romDirectory = Path.Combine(FilesDir!.AbsolutePath, "roms");
             Directory.CreateDirectory(romDirectory);
             string destination = Path.Combine(romDirectory, displayName);
-            using (Stream? input = ContentResolver!.OpenInputStream(data.Data))
+            string temporary = destination + ".tmp";
+            long maxBytes = Path.GetExtension(displayName).Equals(".zip", StringComparison.OrdinalIgnoreCase) ||
+                Path.GetExtension(displayName).Equals(".7z", StringComparison.OrdinalIgnoreCase)
+                ? CartridgeFileLoader.MaxArchiveBytes
+                : CartridgeFileLoader.MaxRomBytes;
+            try
             {
-                if (input == null) throw new IOException("Android could not open that file.");
-                using var output = File.Create(destination);
-                input.CopyTo(output);
+                using (Stream? input = ContentResolver!.OpenInputStream(data.Data))
+                {
+                    if (input == null) throw new IOException("Android could not open that file.");
+                    using var output = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None);
+                    CopyBounded(input, output, maxBytes);
+                }
+                File.Move(temporary, destination, true);
+            }
+            catch
+            {
+                if (File.Exists(temporary)) File.Delete(temporary);
+                throw;
             }
 
             _game?.LoadRom(destination);
@@ -146,6 +160,22 @@ public sealed class MainActivity : Activity
         {
             Toast.MakeText(this, ex.Message, ToastLength.Long)?.Show();
         }
+    }
+
+    private static void CopyBounded(Stream input, Stream output, long maximumBytes)
+    {
+        byte[] buffer = new byte[81920];
+        long total = 0;
+        int read;
+        while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
+        {
+            total += read;
+            if (total > maximumBytes)
+                throw new InvalidDataException($"Selected file exceeds the {maximumBytes / (1024 * 1024)} MiB safety limit.");
+            output.Write(buffer, 0, read);
+        }
+        if (total == 0)
+            throw new InvalidDataException("The selected file is empty.");
     }
 
     private string? GetDisplayName(global::Android.Net.Uri uri)
