@@ -27,4 +27,7 @@
     <AndroidAsset Include="../artifacts/native/android-arm64/licenses/mGBA-MPL-2.0.txt"
                   Link="licenses/mGBA-MPL-2.0.txt" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../shared/PocketGB.Shared.csproj" />
+  </ItemGroup>
 </Project>
