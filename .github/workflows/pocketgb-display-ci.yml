@@ -109,10 +109,10 @@ jobs:
             PocketGB 1.5.0 — Windows and Android release.
 
             Downloads:
-            - **PocketGB-Setup-1.5.0.exe** — self-contained per-user installer. It keeps the existing PocketGB application ID and install location so installing 1.5.0 upgrades the existing 1.2.0 install.
+            - **PocketGB-Setup-1.5.0.exe** — self-contained per-user installer. It keeps the existing PocketGB application ID and install location so installing 1.5.0 upgrades the existing PocketGB install.
             - **PocketGB-Portable-1.5.0.zip** — self-contained portable Windows build.
             - **SHA256SUMS.txt** — SHA-256 checksums for Windows downloads.
-            - **PocketGB-Android-arm64-1.5.0.apk** — Android 6.0+ arm64-v8a APK; attached by the Android workflow.
+            - **PocketGB-Android-1.5.0.apk** — Android 6.0+ arm64-v8a APK; attached by the Android workflow.
             - **SHA256-ANDROID.txt** — SHA-256 checksum for the Android APK.
 
             Display and graphics:
