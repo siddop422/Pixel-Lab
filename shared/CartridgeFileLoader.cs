@@ -33,10 +33,10 @@ public static class CartridgeFileLoader
     public static bool IsSevenZipArchive(string? path)
     {
         if (string.IsNullOrWhiteSpace(path)) return false;
-        string extension = path.StartsWith(".", StringComparison.Ordinal)
-            ? path
-            : Path.GetExtension(path);
-        return extension.Equals(".7z", StringComparison.OrdinalIgnoreCase);
+        string extension = Path.GetExtension(path);
+        if (extension.Equals(".7z", StringComparison.OrdinalIgnoreCase)) return true;
+        return extension.Equals(".pak", StringComparison.OrdinalIgnoreCase) &&
+               File.Exists(path) && HasSevenZipContainerSignature(path);
     }
 
     public static bool IsSupportedGameFileName(string? fileName)
@@ -44,7 +44,7 @@ public static class CartridgeFileLoader
         if (string.IsNullOrWhiteSpace(fileName)) return false;
         string extension = Path.GetExtension(fileName);
         return extension.Equals(".zip", StringComparison.OrdinalIgnoreCase) ||
-               IsSevenZipArchive(fileName) ||
+               extension.Equals(".7z", StringComparison.OrdinalIgnoreCase) ||
                IsSupportedRomExtension(extension);
     }
 
@@ -66,6 +66,16 @@ public static class CartridgeFileLoader
                 (header[2] == 0x07 && header[3] == 0x08));
     }
 
+    private static bool HasSevenZipContainerSignature(string path)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        Span<byte> header = stackalloc byte[6];
+        int read = stream.Read(header);
+        return read == 6 &&
+               header[0] == 0x37 && header[1] == 0x7A && header[2] == 0xBC &&
+               header[3] == 0xAF && header[4] == 0x27 && header[5] == 0x1C;
+    }
+
     /// <summary>
     /// Returns a direct ROM unchanged, extracts a ROM from ZIP into a content-addressed cache,
     /// or leaves a 7z archive for mGBA's built-in LZMA/VFS reader.
@@ -82,7 +92,8 @@ public static class CartridgeFileLoader
             throw new FileNotFoundException("The selected game file could not be found.", fullPath);
 
         string extension = Path.GetExtension(fullPath);
-        if (extension.Equals(".7z", StringComparison.OrdinalIgnoreCase))
+        if (extension.Equals(".7z", StringComparison.OrdinalIgnoreCase) ||
+            (extension.Equals(".pak", StringComparison.OrdinalIgnoreCase) && HasSevenZipContainerSignature(fullPath)))
         {
             long archiveSize = new FileInfo(fullPath).Length;
             if (archiveSize <= 0 || archiveSize > MaxArchiveBytes)
