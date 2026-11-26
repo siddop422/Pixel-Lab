@@ -551,6 +551,76 @@ public sealed class MgbaNativeSmokeTests
         }
     }
 
+    [Theory]
+    [InlineData((byte)0x80, (byte)0x00, ".gbc")]
+    [InlineData((byte)0x00, (byte)0x03, ".sgb")]
+    public void NativeCoreLoadsColorAndSgbTaggedCartridges(byte cgbFlag, byte sgbFlag, string extension)
+    {
+        Environment.SetEnvironmentVariable("GBSHARP_AUDIO", "none");
+
+        byte[] rom = new byte[32 * 1024];
+        rom[0x100] = 0x18; // JR -2: boot into a harmless loop.
+        rom[0x101] = 0xFE;
+        rom[0x104] = 0xCE;
+        rom[0x105] = 0xED;
+        rom[0x106] = 0x66;
+        rom[0x107] = 0x66;
+        byte[] title = System.Text.Encoding.ASCII.GetBytes("PGB COLOR TEST");
+        Array.Copy(title, 0, rom, 0x134, Math.Min(15, title.Length));
+        rom[0x143] = cgbFlag; // CGB-compatible flag.
+        rom[0x146] = sgbFlag; // SGB flag 0x03, or 0 for a normal CGB test.
+        rom[0x147] = 0x00;
+        rom[0x148] = 0x00;
+        rom[0x149] = 0x00;
+
+        byte checksum = 0;
+        for (int i = 0x134; i <= 0x14C; i++)
+            checksum = (byte)(checksum - rom[i] - 1);
+        rom[0x14D] = checksum;
+
+        string path = Path.Combine(Path.GetTempPath(), $"pocketgb-mgba-color-{Guid.NewGuid():N}{extension}");
+        string statePath = Path.ChangeExtension(path, ".state0");
+        File.WriteAllBytes(path, rom);
+        try
+        {
+            using var core = new MgbaCore(new EmulatorConfig());
+            core.LoadRom(path);
+
+            Assert.True(core.HasRom);
+            Assert.Equal("Game Boy / Color", core.PlatformName);
+            Assert.Equal(160, core.FrameWidth);
+            Assert.Equal(144, core.FrameHeight);
+            core.RunFrames(2);
+            core.SaveState();
+            Assert.True(core.LoadState());
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+            if (File.Exists(statePath)) File.Delete(statePath);
+            Environment.SetEnvironmentVariable("GBSHARP_AUDIO", null);
+        }
+    }
+
+    [Fact]
+    public void NativeCoreRejectsRandomDataInsteadOfStartingAnEmptyGame()
+    {
+        Environment.SetEnvironmentVariable("GBSHARP_AUDIO", "none");
+        string path = Path.Combine(Path.GetTempPath(), $"pocketgb-invalid-{Guid.NewGuid():N}.gba");
+        File.WriteAllBytes(path, new byte[4096]);
+        try
+        {
+            using var core = new MgbaCore(new EmulatorConfig());
+            Assert.Throws<InvalidDataException>(() => core.LoadRom(path));
+            Assert.False(core.HasRom);
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+            Environment.SetEnvironmentVariable("GBSHARP_AUDIO", null);
+        }
+    }
+
     [Fact]
     public void NativeCoreLoadsAndRunsSyntheticGbaCartridge()
     {
