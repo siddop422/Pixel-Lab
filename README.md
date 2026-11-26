@@ -104,8 +104,8 @@ Gamepad D-pad, face buttons, Start/Back and shoulder/trigger buttons are mapped 
 ## Saves and supported files
 
 - Direct .gb, .gbc, .sgb, .gba and raw-image aliases .gbx, .agb, .dmg, .cgb, .bin, .rom and .pak. An alias is accepted only when mGBA recognises the actual cartridge header.
-- ZIP and 7z archives containing supported GB/GBC/GBA cartridges. ZIP/7z entries are selected in deterministic folder-depth and filename order; nested 7z folders are scanned.
-- ZIP containers renamed .pak are identified by the PKZIP signature. Other .pak files are treated as raw ROM candidates, not as a promise to support every proprietary game-engine PAK archive.
+- ZIP and 7z archives containing supported GB/GBC/GBA cartridges. ZIP entries are selected in deterministic folder-depth and filename order; nested 7z folders are scanned in the archive's directory order.
+- ZIP or 7z containers renamed .pak are identified by their file signatures. Other .pak files are treated as raw ROM candidates, not as a promise to support every proprietary game-engine PAK archive.
 - IPS/UPS/BPS patches: Windows desktop applies matching sidecar patches automatically (BPS, then UPS, then IPS); Android provides a PATCH button for manual patch selection.
 - GameboySharp: ten save-state slots, quick save/load and battery-backed .sav files, including MBC3 RTC data.
 - mGBA: quick save/load state (.state0) and battery-backed .sav data.
