@@ -146,7 +146,7 @@ internal sealed class EmulatorSurfaceView : SurfaceView, ISurfaceHolderCallback,
             Keycode.A or Keycode.ButtonL1 => 1u << 9,
             Keycode.S or Keycode.ButtonR1 => 1u << 8,
             Keycode.Enter or Keycode.ButtonStart => 1u << 3,
-            Keycode.ButtonSelect or Keycode.Backspace => 1u << 2,
+            Keycode.ButtonSelect => 1u << 2,
             _ => 0u
         };
         if (bit == 0) return false;
@@ -309,7 +309,7 @@ internal sealed class EmulatorSurfaceView : SurfaceView, ISurfaceHolderCallback,
             int rate = sampleRate > 8000 && sampleRate <= 96000 ? sampleRate : 48000;
             int bufferBytes = AudioTrack.GetMinBufferSize(rate, ChannelOut.Stereo, Encoding.Pcm16bit);
             bufferBytes = Math.Max(bufferBytes, rate / 5 * 4);
-            _audioTrack = new AudioTrack(Android.Media.Stream.Music, rate, ChannelOut.Stereo,
+            _audioTrack = new AudioTrack(global::Android.Media.Stream.Music, rate, ChannelOut.Stereo,
                 Encoding.Pcm16bit, bufferBytes, AudioTrackMode.Stream);
             if (_audioTrack.State == AudioTrackState.Initialized) _audioTrack.Play();
         }
@@ -413,7 +413,7 @@ internal sealed class EmulatorSurfaceView : SurfaceView, ISurfaceHolderCallback,
     private Paint TextPaint(float size)
     {
         _paint.TextSize = size;
-        _paint.Typeface = Typeface.Create("sans-serif-medium", TypefaceStyle.Bold);
+        _paint.SetTypeface(Typeface.Create("sans-serif-medium", TypefaceStyle.Bold));
         _paint.TextAlign = Paint.Align.Center;
         return _paint;
     }
@@ -434,7 +434,7 @@ internal sealed class EmulatorSurfaceView : SurfaceView, ISurfaceHolderCallback,
     {
         _paint.Color = Color.Argb(215, 220, 240, 228);
         _paint.TextSize = Math.Max(14, canvas.Height * 0.025f);
-        _paint.Typeface = Typeface.Create("sans-serif-medium", TypefaceStyle.Normal);
+        _paint.Typeface = Typeface.Create("sans-serif-medium", TypefaceStyle.Normal));
         _paint.TextAlign = Paint.Align.Left;
         string title = string.IsNullOrWhiteSpace(_gameTitle) ? _status : _gameTitle;
         canvas.DrawText(title, canvas.Width * 0.025f, canvas.Height * 0.17f, _paint);
