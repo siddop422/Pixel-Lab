@@ -11,6 +11,7 @@
 #include <mgba-util/image.h>
 #include <mgba-util/vfs.h>
 
+#include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
