@@ -64,6 +64,16 @@ internal sealed class EmulatorSurfaceView : SurfaceView, ISurfaceHolderCallback,
         }
     }
 
+    public void ApplyPatch(string path)
+    {
+        lock (_coreLock)
+        {
+            _core.ApplyPatchFile(path);
+            _status = $"Patch applied • {_gameTitle}";
+            _core.CopyPixelsArgb(EnsurePixelBuffer(_core.Width * _core.Height));
+        }
+    }
+
     public void TogglePause()
     {
         lock (_coreLock)

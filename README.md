@@ -2,16 +2,16 @@
 
 ![PocketGB logo](assets/PocketGB-logo.svg)
 
-PocketGB is a lightweight Windows desktop emulator for Nintendo Game Boy, Game Boy Color, and Game Boy Advance cartridges. It includes native mGBA support for GBA, save states, battery saves, keyboard/gamepad input, configurable display filters, window/fullscreen controls, a real frame-based fast-forward scheduler, and a self-contained runtime.
+PocketGB is a lightweight Windows desktop and Android emulator for Nintendo Game Boy, Game Boy Color, and Game Boy Advance cartridges. It uses the native mGBA core for broad cartridge compatibility, with save states, battery saves, keyboard/gamepad/touch input, configurable display filters, speed controls, and self-contained releases.
 
 ## Latest Windows build
 
-The current release is **PocketGB 1.5.0**. Download the [Windows installer](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.5.0/PocketGB-Setup-1.5.0.exe), [portable ZIP](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.5.0/PocketGB-Portable-1.5.0.zip), or [Android APK](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.5.0/PocketGB-Android-1.5.0.apk). Verify Windows downloads with [SHA256SUMS.txt](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.5.0/SHA256SUMS.txt) and the APK with [SHA256-ANDROID.txt](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.5.0/SHA256-ANDROID.txt). See [all PocketGB releases](https://github.com/siddop422/Pixel-Lab/releases).
+The current release is **PocketGB 1.6.0**. Download the [Windows installer](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.6.0/PocketGB-Setup-1.6.0.exe), [portable ZIP](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.6.0/PocketGB-Portable-1.6.0.zip), or [Android APK](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.6.0/PocketGB-Android-1.6.0.apk). Verify Windows downloads with [SHA256SUMS.txt](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.6.0/SHA256SUMS.txt) and the APK with [SHA256-ANDROID.txt](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.6.0/SHA256-ANDROID.txt). See [all PocketGB releases](https://github.com/siddop422/Pixel-Lab/releases).
 
 | Download | What it is |
 | --- | --- |
-| **PocketGB-Setup-1.5.0.exe** | Windows 10/11 x64 installer. Installs per-user and upgrades the existing PocketGB installation. |
-| **PocketGB-Portable-1.5.0.zip** | Self-contained Windows x64 portable build. Extract and run `PocketGB.exe`. |
+| **PocketGB-Setup-1.6.0.exe** | Windows 10/11 x64 installer. Installs per-user and upgrades the existing PocketGB installation. |
+| **PocketGB-Portable-1.6.0.zip** | Self-contained Windows x64 portable build. Extract and run `PocketGB.exe`. |
 | **SHA256SUMS.txt / SHA256-ANDROID.txt** | SHA-256 hashes for Windows and Android downloads. |
 
 The installer retains the same application ID and install folder, so running a newer setup over PocketGB 1.2.0 upgrades that installation instead of creating a second app entry. User configuration and game saves remain separate from the application directory.
@@ -20,37 +20,35 @@ The installer retains the same application ID and install folder, so running a n
 
 ## Android APK
 
-PocketGB 1.5.0 also includes a native Android app for Android 6.0+ on ARM64, ARMv7, x86_64 and x86 devices. Download the [PocketGB Android APK](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.5.0/PocketGB-Android-1.5.0.apk) from the same release page.
+PocketGB 1.6.0 also includes a native Android app for Android 6.0+ on ARM64, ARMv7, x86_64 and x86 devices. Download the [PocketGB Android APK](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.6.0/PocketGB-Android-1.6.0.apk) from the same release page.
 
-The Android build uses the pinned native mGBA core for GB, GBC and GBA games, with a landscape display, touch D-pad/buttons, hardware-key input, Android file picker, stereo audio, pause/reset, speed/turbo, save states and battery saves. It supports `.gb`, `.gbc`, `.sgb`, `.gba` and ZIP archives containing one supported ROM. The universal APK bundles mGBA native libraries for `arm64-v8a`, `armeabi-v7a`, `x86_64` and `x86`, so it can install on 64-bit/32-bit ARM phones and supported x86 Android emulators.
+The Android build uses the pinned native mGBA core for GB, GBC and GBA games, with a landscape display, touch D-pad/buttons, hardware-key input, Android file picker, stereo audio, pause/reset, speed/turbo, save states and battery saves. It accepts raw cartridge files, ZIP and 7z archives, and `.pak` files when they contain either a ZIP container or a real GB/GBC/GBA ROM image. The universal APK bundles mGBA native libraries for `arm64-v8a`, `armeabi-v7a`, `x86_64` and `x86`.
 
 Read the [Android install/build guide](android/README.md). The APK is signed for installation. For seamless updates across releases, configure a persistent signing key in GitHub Actions secrets; if CI uses its one-off fallback key, uninstall the older APK and back up its saves before installing a differently-signed future build.
 
-## What's new in 1.5.0
+## What's new in 1.6.0
 
-- Native mGBA core for Game Boy Advance, Game Boy and Game Boy Color on Windows x64 and Android arm64, ARMv7, x86_64 and x86.
-- Emulation core selector: Auto, GameboySharp (GB/GBC), and mGBA (GB/GBC/GBA).
-- Auto prefers mGBA for `.gba`, `.gb`, `.gbc`, and `.sgb` files for broader compatibility; GameboySharp remains a selectable manual GB/GBC fallback.
-- GBA output at 240×160 with dynamic aspect-ratio scaling; GB/GBC output remains 160×144.
-- mGBA input mapping for GBA controls, stereo audio, battery saves, reset, and quick save/load state.
-- Real frame-based speed multipliers and configurable Tab turbo (2×–16×); faster render FPS is shown separately from actual emulated game FPS.
-- Core-only mGBA native DLL build, pinned upstream source revision, and MPL-2.0 notice included in the portable package.
-- Reduced self-contained publish size by disabling ReadyToRun images; installer uses LZMA2/ultra64 compression.
-
+- Unified ROM loading across the Windows desktop app, portable ZIP and Android APK.
+- Native mGBA 7z support, including nested folders, plus ZIP and ZIP-based PAK detection.
+- Automatic desktop IPS/UPS/BPS sidecar patch loading; Android has an explicit PATCH action for IPS/UPS/BPS.
+- Broader raw cartridge filename aliases including .gbx, .agb, .dmg, .cgb, .bin, .rom and .pak; mGBA validates the actual ROM header.
+- Automated coverage for GB, GBC, SGB-flagged GB, GBA, ZIP imports, PAK aliases, corrupt/oversized inputs and save-state round-trips.
+- Damaged battery saves are preserved as .corrupt-* backups instead of preventing an otherwise valid game from opening.
+- Universal Android APK retains all four ABIs: ARM64, ARMv7, x86_64 and x86.
 ## Systems and cartridge compatibility
 
 | System / cartridge | Status |
 | --- | --- |
-| Original Game Boy (DMG) | GameboySharp core |
-| Game Boy Color (CGB) | mGBA in Auto mode; GameboySharp selectable as fallback |
-| Game Boy Advance (GBA) | mGBA native core in the Windows x64 build |
+| Original Game Boy (DMG) | mGBA in Auto mode; GameboySharp manual fallback |
+| Game Boy Color (CGB) | mGBA in Auto mode; GameboySharp manual fallback |
+| Game Boy Advance (GBA) | mGBA native core on Windows x64 and all four Android ABIs |
 | Standard ROM-only, MBC1, MBC2, MBC3, and MBC5 | Implemented by GameboySharp |
 | Standard ROM+RAM and ROM+RAM+battery (0x08/0x09) | Implemented by GameboySharp |
 | Special GB ROM size codes 0x52/0x53/0x54 | Header parsing implemented |
 | MBC6, MBC7, MMM01, HuC-1, HuC-3, TAMA5, Pocket Camera | Not implemented in GameboySharp; uncommon cartridge types are reported clearly |
-| Super Game Boy enhancements | Not implemented |
+| Super Game Boy enhancements | `.sgb` cartridges run as GB games; full SGB border/controller enhancement rendering is not implemented |
 
-mGBA is the recommended Auto core for GBA and GB/GBC because it supports a broader set of cartridge types; GameboySharp remains available as a manual GB/GBC fallback. No emulator can guarantee every game, peripheral, mapper, or ROM hack works perfectly. The automated suite includes generated native GBA and GB cartridge smoke tests; the uploaded Balatro GBA ROM and the Geometry Dash GB ROM have not been run in CI. Its local header check matches the GBA marker bytes recognised by mGBA.
+mGBA is the recommended Auto core for GBA and GB/GBC because it supports a broader set of cartridge types; GameboySharp remains available as a manual GB/GBC fallback on Windows. mGBA detects cartridge platform from ROM bytes rather than trusting the filename. No emulator can guarantee every game, mapper, special peripheral, or ROM hack works perfectly. CI now runs generated native GB, GBC, SGB-flagged GB and GBA boot/frame/save-state tests, plus ZIP loader and corrupt-input tests; named commercial/homebrew examples still require separate real-game testing.
 
 No commercial ROMs or BIOS files are included. mGBA's HLE BIOS is used by default.
 
@@ -105,14 +103,15 @@ Gamepad D-pad, face buttons, Start/Back and shoulder/trigger buttons are mapped 
 
 ## Saves and supported files
 
-- Direct `.gb`, `.gbc`, `.sgb`, and `.gba` cartridge images.
-- ZIP archives containing supported GB/GBC/GBA ROMs.
-- GameboySharp: ten save-state slots, quick save/load and battery-backed `.sav` files, including MBC3 RTC data.
-- mGBA: quick save/load state (`.state0`) and battery-backed `.sav` data.
-- Saves are written beside the original ROM or ZIP, or to the optional configured save folder.
-- ZIP extraction is cached; replacing an archive invalidates the old cache. Save files remain beside the original ZIP, not in the cache.
-- ZIP entries are limited to 64 MiB. 7z and RAR archives are not supported.
-
+- Direct .gb, .gbc, .sgb, .gba and raw-image aliases .gbx, .agb, .dmg, .cgb, .bin, .rom and .pak. An alias is accepted only when mGBA recognises the actual cartridge header.
+- ZIP and 7z archives containing supported GB/GBC/GBA cartridges. ZIP entries are selected in deterministic folder-depth and filename order; nested 7z folders are scanned in the archive's directory order.
+- ZIP or 7z containers renamed .pak are identified by their file signatures. Other .pak files are treated as raw ROM candidates, not as a promise to support every proprietary game-engine PAK archive.
+- IPS/UPS/BPS patches: Windows desktop applies matching sidecar patches automatically (BPS, then UPS, then IPS); Android provides a PATCH button for manual patch selection.
+- GameboySharp: ten save-state slots, quick save/load and battery-backed .sav files, including MBC3 RTC data.
+- mGBA: quick save/load state (.state0) and battery-backed .sav data.
+- Saves for ZIP-launched games remain beside the original archive rather than inside the extracted ROM cache.
+- Raw ROMs and extracted archive entries are limited to 32 MiB; ZIP, 7z and ZIP-based PAK containers are limited to 128 MiB. RAR is not supported.
+- Unreadable battery saves are preserved as timestamped .corrupt-* backups so they do not block game startup.
 ## Requirements
 
 - Windows 10/11 x64 for the desktop app.
@@ -134,7 +133,7 @@ git -C third_party/mgba checkout 431935616c0e216d650b25b2ea0c0acccd359038
 pwsh ./scripts/Prepare.ps1
 pwsh ./scripts/Build-Mgba.ps1
 dotnet test ./vendor/GameboySharp/GameboySharp.sln -c Release
-dotnet publish ./vendor/GameboySharp/GameboySharp.csproj -c Release -r win-x64 --self-contained true -p:AssemblyName=PocketGB -p:Version=1.5.0 -o publish
+dotnet publish ./vendor/GameboySharp/GameboySharp.csproj -c Release -r win-x64 --self-contained true -p:AssemblyName=PocketGB -p:Version=1.6.0 -o publish
 ```
 
 The native mGBA core is MPL-2.0 licensed; its notice is included with the Windows output. No game ROMs or BIOS dumps are included.

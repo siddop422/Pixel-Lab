@@ -8,6 +8,7 @@ using Android.Views;
 using Android.Widget;
 using System.IO;
 using System.Security.Cryptography;
+using PocketGB.Shared;
 
 namespace PocketGB.Android;
 
@@ -21,8 +22,9 @@ namespace PocketGB.Android;
 public sealed class MainActivity : Activity
 {
     private const int OpenRomRequest = 4101;
+    private const int OpenPatchRequest = 4102;
     private const long MaxRomBytes = 32L * 1024L * 1024L;
-    private const long MaxZipBytes = 64L * 1024L * 1024L;
+    private const long MaxArchiveBytes = CartridgeFileLoader.MaxArchiveBytes;
     private EmulatorSurfaceView? _game;
     private Button? _pauseButton;
     private Button? _speedButton;
@@ -50,6 +52,7 @@ public sealed class MainActivity : Activity
         toolbar.SetBackgroundColor(global::Android.Graphics.Color.Argb(210, 10, 26, 20));
 
         AddToolbarButton(toolbar, "OPEN", OpenRom);
+        AddToolbarButton(toolbar, "PATCH", OpenPatch);
         _pauseButton = AddToolbarButton(toolbar, "PAUSE", TogglePause);
         AddToolbarButton(toolbar, "RESET", () => _game?.Reset());
         _speedButton = AddToolbarButton(toolbar, "1x", CycleSpeed);
@@ -118,20 +121,48 @@ public sealed class MainActivity : Activity
         }
     }
 
+    private void OpenPatch()
+    {
+        var intent = new Intent(Intent.ActionOpenDocument);
+        intent.AddCategory(Intent.CategoryOpenable);
+        intent.SetType("*/*");
+        try
+        {
+            StartActivityForResult(Intent.CreateChooser(intent, "Choose an IPS, UPS or BPS patch"), OpenPatchRequest);
+        }
+        catch (Exception ex)
+        {
+            Toast.MakeText(this, $"Could not open patch picker: {ex.Message}", ToastLength.Long)?.Show();
+        }
+    }
+
     protected override void OnActivityResult(int requestCode, Result resultCode, Intent? data)
     {
         base.OnActivityResult(requestCode, resultCode, data);
-        if (requestCode != OpenRomRequest || resultCode != Result.Ok || data?.Data == null) return;
+        if ((requestCode != OpenRomRequest && requestCode != OpenPatchRequest) ||
+            resultCode != Result.Ok || data?.Data == null) return;
 
         try
         {
             string displayName = GetDisplayName(data.Data) ?? $"game-{DateTime.UtcNow:yyyyMMdd-HHmmss}.rom";
             displayName = Path.GetFileName(displayName);
             string extension = Path.GetExtension(displayName).ToLowerInvariant();
-            if (extension is not (".gb" or ".gbc" or ".sgb" or ".gba" or ".zip"))
-                throw new InvalidDataException("Choose a .gb, .gbc, .sgb, .gba or .zip file.");
+            string destination;
 
-            string destination = ImportDocument(data.Data, displayName, extension);
+            if (requestCode == OpenPatchRequest)
+            {
+                if (extension is not (".ips" or ".ups" or ".bps"))
+                    throw new InvalidDataException("Choose an IPS, UPS or BPS patch.");
+                destination = ImportDocument(data.Data, displayName, extension);
+                _game?.ApplyPatch(destination);
+                Toast.MakeText(this, $"Applied {displayName}", ToastLength.Short)?.Show();
+                return;
+            }
+
+            if (!CartridgeFileLoader.IsSupportedGameFileName(displayName))
+                throw new InvalidDataException("Choose a GB, GBC, SGB, GBA, GBX, BIN, ROM, PAK, ZIP or 7z game file.");
+
+            destination = ImportDocument(data.Data, displayName, extension);
             _game?.LoadRom(destination);
             if (_pauseButton != null) _pauseButton.Text = "PAUSE";
             Toast.MakeText(this, $"Loaded {displayName}", ToastLength.Short)?.Show();
@@ -147,7 +178,7 @@ public sealed class MainActivity : Activity
         string romDirectory = Path.Combine(FilesDir!.AbsolutePath, "roms");
         Directory.CreateDirectory(romDirectory);
         string temporary = Path.Combine(romDirectory, $".import-{Guid.NewGuid():N}.tmp");
-        long limit = extension == ".zip" ? MaxZipBytes : MaxRomBytes;
+        long limit = extension is ".zip" or ".7z" or ".pak" ? MaxArchiveBytes : MaxRomBytes;
 
         try
         {
@@ -162,8 +193,8 @@ public sealed class MainActivity : Activity
                 {
                     copied += read;
                     if (copied > limit)
-                        throw new InvalidDataException(extension == ".zip"
-                            ? "ZIP archives must be 64 MiB or smaller."
+                        throw new InvalidDataException(extension is ".zip" or ".7z" or ".pak"
+                            ? "ZIP/7z/PAK containers must be 128 MiB or smaller."
                             : "ROM files must be 32 MiB or smaller.");
                     output.Write(buffer, 0, read);
                 }

@@ -48,10 +48,13 @@ jobs:
         shell: pwsh
         run: dotnet test ./vendor/GameboySharp/GameboySharp.sln -c Release
 
+      - name: Test shared cross-platform cartridge loader
+        run: dotnet test ./shared.tests/PocketGB.Shared.Tests.csproj -c Release --verbosity normal
+
       - name: Publish Windows x64
         shell: pwsh
         run: |
-          dotnet publish ./vendor/GameboySharp/GameboySharp.csproj -c Release -r win-x64 --self-contained true -p:AssemblyName=PocketGB -p:Version=1.5.0 -p:PublishReadyToRun=false -p:TieredPGO=true -p:DebugType=none -p:DebugSymbols=false -o ./publish
+          dotnet publish ./vendor/GameboySharp/GameboySharp.csproj -c Release -r win-x64 --self-contained true -p:Version=1.6.0 -p:PublishReadyToRun=false -p:TieredPGO=true -p:DebugType=none -p:DebugSymbols=false -o ./publish
           if ($LASTEXITCODE -ne 0) { throw "Publish failed." }
           if (-not (Test-Path ./publish/PocketGB.exe)) { throw "PocketGB.exe missing." }
 
@@ -71,10 +74,10 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force ./dist | Out-Null
           $compiler = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          & $compiler /DAppVersion="1.5.0" /DPublishDir="..\publish" ./install/PocketGB.iss
+          & $compiler /DAppVersion="1.6.0" /DPublishDir="..\publish" ./install/PocketGB.iss
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed." }
-          if (-not (Test-Path ./dist/PocketGB-Setup-1.5.0.exe)) { throw "Installer missing." }
-          Compress-Archive -Path ./publish/* -DestinationPath ./dist/PocketGB-Portable-1.5.0.zip -CompressionLevel Optimal
+          if (-not (Test-Path ./dist/PocketGB-Setup-1.6.0.exe)) { throw "Installer missing." }
+          Compress-Archive -Path ./publish/* -DestinationPath ./dist/PocketGB-Portable-1.6.0.zip -CompressionLevel Optimal
           Get-ChildItem ./dist -File | ForEach-Object {
             $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
             "$hash  $($_.Name)"
@@ -85,34 +88,34 @@ jobs:
         with:
           name: PocketGB-Windows-x64
           path: |
-            dist/PocketGB-Setup-1.5.0.exe
-            dist/PocketGB-Portable-1.5.0.zip
+            dist/PocketGB-Setup-1.6.0.exe
+            dist/PocketGB-Portable-1.6.0.zip
             dist/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish official PocketGB v1.5.0 GitHub Release
-        if: "${{ github.event_name == 'push' && startsWith(github.event.head_commit.message, 'release: PocketGB v1.5.0') }}"
+      - name: Publish official PocketGB v1.6.0 GitHub Release
+        if: "${{ github.event_name == 'push' && startsWith(github.event.head_commit.message, 'release: PocketGB v1.6.0') }}"
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: pocketgb-v1.5.0
+          tag_name: pocketgb-v1.6.0
           target_commitish: main
-          name: PocketGB v1.5.0
+          name: PocketGB v1.6.0
           draft: false
           prerelease: false
           fail_on_unmatched_files: true
           files: |
-            dist/PocketGB-Setup-1.5.0.exe
-            dist/PocketGB-Portable-1.5.0.zip
+            dist/PocketGB-Setup-1.6.0.exe
+            dist/PocketGB-Portable-1.6.0.zip
             dist/SHA256SUMS.txt
           body: |
-            PocketGB 1.5.0 — Windows and Android release.
+            PocketGB 1.6.0 — Windows and Android release.
 
             Downloads:
-            - **PocketGB-Setup-1.5.0.exe** — self-contained per-user installer. It keeps the existing PocketGB application ID and install location so installing 1.5.0 upgrades the existing PocketGB install.
-            - **PocketGB-Portable-1.5.0.zip** — self-contained portable Windows build.
+            - **PocketGB-Setup-1.6.0.exe** — self-contained per-user installer. It keeps the existing PocketGB application ID and install location so installing 1.6.0 upgrades the existing PocketGB install.
+            - **PocketGB-Portable-1.6.0.zip** — self-contained portable Windows build.
             - **SHA256SUMS.txt** — SHA-256 checksums for Windows downloads.
-            - **PocketGB-Android-1.5.0.apk** — Android 6.0+ arm64-v8a APK; attached by the Android workflow.
+            - **PocketGB-Android-1.6.0.apk** — Android 6.0+ arm64-v8a APK; attached by the Android workflow.
             - **SHA256-ANDROID.txt** — SHA-256 checksum for the Android APK.
 
             Display and graphics:
@@ -130,4 +133,4 @@ jobs:
 
             Android: one APK with native mGBA GB/GBC/GBA libraries for arm64-v8a, armeabi-v7a, x86_64 and x86; fullscreen landscape touch controls, Android document picker, AudioTrack output, save states, battery saves, pause/reset and speed/turbo.
 
-            Automated tests, the self-contained Windows publish, Inno Setup compilation and Android APK build/signature verification must pass before v1.5.0 is considered complete. The installer is not Authenticode-signed; use the checksums to verify file integrity and download only from this official GitHub release.
+            Automated tests, the self-contained Windows publish, Inno Setup compilation and Android APK build/signature verification must pass before v1.6.0 is considered complete. The installer is not Authenticode-signed; use the checksums to verify file integrity and download only from this official GitHub release.

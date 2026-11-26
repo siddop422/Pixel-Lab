@@ -5,8 +5,8 @@
     <RootNamespace>PocketGB.Android</RootNamespace>
     <ApplicationId>com.blackspiderstudios.pocketgb</ApplicationId>
     <ApplicationTitle>PocketGB</ApplicationTitle>
-    <ApplicationVersion>6</ApplicationVersion>
-    <ApplicationDisplayVersion>1.5.0</ApplicationDisplayVersion>
+    <ApplicationVersion>7</ApplicationVersion>
+    <ApplicationDisplayVersion>1.6.0</ApplicationDisplayVersion>
     <SupportedOSPlatformVersion>23.0</SupportedOSPlatformVersion>
     <AndroidMinSdkVersion>23</AndroidMinSdkVersion>
     <AndroidTargetSdkVersion>36</AndroidTargetSdkVersion>
@@ -37,5 +37,8 @@
 
     <AndroidAsset Include="../artifacts/native/android-arm64/licenses/mGBA-MPL-2.0.txt"
                   Link="licenses/mGBA-MPL-2.0.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../shared/PocketGB.Shared.csproj" />
   </ItemGroup>
 </Project>
