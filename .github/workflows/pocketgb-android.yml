@@ -31,6 +31,14 @@ jobs:
           ref: 431935616c0e216d650b25b2ea0c0acccd359038
           path: third_party/mgba
 
+      - name: Install .NET 9 for cross-platform loader tests
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Test shared cross-platform cartridge loader
+        run: dotnet test ./shared.tests/PocketGB.Shared.Tests.csproj -c Release --verbosity normal
+
       - name: Install Java
         uses: actions/setup-java@v4
         with:
