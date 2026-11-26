@@ -3,6 +3,8 @@
     <TargetFramework>net9.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>PocketGB.Shared</AssemblyName>
+    <PackageId>PocketGB.Shared</PackageId>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 </Project>
