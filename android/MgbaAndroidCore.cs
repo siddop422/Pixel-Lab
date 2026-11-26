@@ -31,6 +31,7 @@ internal sealed class MgbaAndroidCore : IDisposable
     {
         ThrowIfDisposed();
         string resolved = ResolveRom(path);
+        SetSavePaths(resolved);
         byte[] rom = File.ReadAllBytes(resolved);
         if (rom.Length == 0 || rom.Length > 32 * 1024 * 1024)
             throw new InvalidDataException("ROM size must be between 1 byte and 32 MiB.");
@@ -48,7 +49,6 @@ internal sealed class MgbaAndroidCore : IDisposable
         if (double.IsFinite(rate) && rate > 1 && rate < 240) FrameRate = rate;
         HasRom = true;
         LoadBatterySave();
-        CopyPixelsArgb(new int[Width * Height]);
     }
 
     private static string ResolveRom(string path)
