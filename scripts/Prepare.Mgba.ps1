@@ -179,7 +179,10 @@ $newLoadMethod = @'
             {
                 string resolvedPath = RomFileLoader.ResolveRomPath(path);
                 string extension = Path.GetExtension(resolvedPath);
-                bool requiresMgba = extension.Equals(".gba", StringComparison.OrdinalIgnoreCase) ||
+                bool isLegacyGbExtension = extension.Equals(".gb", StringComparison.OrdinalIgnoreCase) ||
+                    extension.Equals(".gbc", StringComparison.OrdinalIgnoreCase) ||
+                    extension.Equals(".sgb", StringComparison.OrdinalIgnoreCase);
+                bool requiresMgba = !isLegacyGbExtension ||
                     _config.General.EmulationBackend != EmulationBackend.GameboySharp;
 
                 if (requiresMgba)
@@ -214,6 +217,10 @@ if (-not $project.Contains("native/mgba/managed/*.cs")) {
     <Compile Include="../../native/mgba/managed/*.cs" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="../../shared/PocketGB.Shared.csproj" />
+  </ItemGroup>
+
   <ItemGroup Condition="'$(RuntimeIdentifier)' == 'win-x64'">
     <Content Include="../../artifacts/native/win-x64/**/*">
       <Link>%(RecursiveDir)%(Filename)%(Extension)</Link>
@@ -244,7 +251,11 @@ $startupBlock = @'
             try
             {
                 string resolvedPath = RomFileLoader.ResolveRomPath(args[0]);
-                bool useMgba = Path.GetExtension(resolvedPath).Equals(".gba", StringComparison.OrdinalIgnoreCase) ||
+                string startupExtension = Path.GetExtension(resolvedPath);
+                bool isLegacyGbExtension = startupExtension.Equals(".gb", StringComparison.OrdinalIgnoreCase) ||
+                    startupExtension.Equals(".gbc", StringComparison.OrdinalIgnoreCase) ||
+                    startupExtension.Equals(".sgb", StringComparison.OrdinalIgnoreCase);
+                bool useMgba = !isLegacyGbExtension ||
                     config.General.EmulationBackend != EmulationBackend.GameboySharp;
                 if (useMgba) mgbaStartupRom = args[0];
                 else emulator.LoadRom(resolvedPath, args[0]);
@@ -423,6 +434,49 @@ $program = $program.Substring(0, $loopStart) + $loop + $program.Substring($loopE
 [System.IO.File]::WriteAllText($programPath, $program, [System.Text.UTF8Encoding]::new($false))
 
 Write-Host "mGBA command-line routing and unified GB/GBA frame scheduler prepared." -ForegroundColor Green
+
+# Use one shared extension policy for file browsing, drag/drop and the managed resolver.
+$fileBrowserPath = Join-Path $vendor "UI/FileBrowser.cs"
+$fileBrowser = [System.IO.File]::ReadAllText($fileBrowserPath)
+$fileBrowser = Replace-ExactlyOnce $fileBrowser 'private static readonly string[] RomExtensions = { ".gb", ".gbc", ".sgb", ".zip", ".gba" };' 'private static readonly string[] RomExtensions = { ".gb", ".gbc", ".sgb", ".gba", ".gbx", ".agb", ".dmg", ".cgb", ".bin", ".rom", ".zip", ".7z" };' "expanded game file filter"
+[System.IO.File]::WriteAllText($fileBrowserPath, $fileBrowser, [System.Text.UTF8Encoding]::new($false))
+
+$windowPath = Join-Path $vendor "UI/GameWindow.cs"
+$window = [System.IO.File]::ReadAllText($windowPath)
+$window = Replace-ExactlyOnce $window 'if (extension is ".gb" or ".gbc" or ".sgb" or ".zip" or ".gba")' 'if (extension is ".gb" or ".gbc" or ".sgb" or ".gba" or ".gbx" or ".agb" or ".dmg" or ".cgb" or ".bin" or ".rom" or ".zip" or ".7z")' "expanded drag and drop routing"
+[System.IO.File]::WriteAllText($windowPath, $window, [System.Text.UTF8Encoding]::new($false))
+
+# Replace the older desktop-only resolver with the shared implementation used by Android too.
+$sharedLoader = @'
+using PocketGB.Shared;
+
+namespace GameboySharp;
+
+internal static class RomFileLoader
+{
+    private static string CacheDirectory
+    {
+        get
+        {
+            string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (string.IsNullOrWhiteSpace(local))
+                local = Path.GetTempPath();
+            return Path.Combine(local, "PocketGB", "rom-cache");
+        }
+    }
+
+    public static string ResolveRomPath(string path) =>
+        CartridgeFileLoader.ResolveRomPath(path, CacheDirectory);
+
+    public static bool IsRomExtension(string extension) =>
+        CartridgeFileLoader.IsSupportedRomExtension(extension);
+}
+'@
+$romLoaderPath = Join-Path $vendor "RomFileLoader.cs"
+[System.IO.File]::WriteAllText($romLoaderPath, $sharedLoader, [System.Text.UTF8Encoding]::new($false))
+
+Write-Host "Desktop and portable builds now share the cross-platform ROM resolver." -ForegroundColor Green
+
 
 
 # Test the complete managed-to-native path with a tiny synthetic GBA homebrew image.
