@@ -2,146 +2,93 @@ name: PocketGB Android APK
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - pocketgb-android
   pull_request:
-    branches: [main]
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-android-apk:
+    name: Build Android arm64 APK
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - name: Check out PocketGB and its GameboySharp submodule
+      - name: Checkout PocketGB source
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Check out the pinned mGBA source
+      - name: Checkout pinned mGBA core
         uses: actions/checkout@v4
         with:
           repository: mgba-emu/mgba
           ref: 431935616c0e216d650b25b2ea0c0acccd359038
           path: third_party/mgba
 
-      - name: Set up Java 17
+      - name: Install Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: 17
 
-      - name: Set up Android SDK and NDK
+      - name: Install Android SDK and NDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android build tools
+      - name: Install Android platform and native toolchain
         shell: bash
         run: |
           sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
 
-      - name: Set up .NET 9
+      - name: Install .NET 9
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 9.0.x
 
-      - name: Install .NET for Android workload
+      - name: Install .NET Android workload
         run: dotnet workload install android
 
-      - name: Build pinned mGBA native core for Android arm64
+      - name: Compile mGBA core for Android arm64
         shell: bash
         run: ./scripts/build-mgba-android.sh
 
-      - name: Publish PocketGB Android APK
-        env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      - name: Publish Android APK
         shell: bash
         run: |
-          dotnet publish ./android/PocketGB.Android.csproj \
+          dotnet publish android/PocketGB.Android.csproj \
             -c Release \
             -f net9.0-android \
             -r android-arm64 \
             -p:AndroidPackageFormat=apk \
-            -o ./publish/android
-          APK="$(find ./publish/android -type f -name '*.apk' -print -quit)"
-          if [[ -z "$APK" ]]; then
-            echo "The .NET Android publish did not produce an APK." >&2
-            exit 1
-          fi
-          mkdir -p ./dist/android
-
-          # Prefer a repository-provided persistent signing key. When it is not configured,
-          # generate an installable one-off release key; users must uninstall that build
-          # before installing a future APK signed by a different key.
-          if [[ -n "$ANDROID_KEYSTORE_BASE64" ]]; then
-            echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/pocketgb.keystore"
-            KEYSTORE="$RUNNER_TEMP/pocketgb.keystore"
-            STORE_PASS="$ANDROID_KEYSTORE_PASSWORD"
-            KEY_ALIAS="$ANDROID_KEY_ALIAS"
-            KEY_PASS="$ANDROID_KEY_PASSWORD"
-          else
-            KEYSTORE="$RUNNER_TEMP/pocketgb-oneoff.keystore"
-            STORE_PASS="PocketGB-OneOff-2026"
-            KEY_ALIAS="pocketgb"
-            KEY_PASS="$STORE_PASS"
-            keytool -genkeypair -v -keystore "$KEYSTORE" -storepass "$STORE_PASS" \
-              -alias "$KEY_ALIAS" -keypass "$KEY_PASS" -keyalg RSA -keysize 2048 \
-              -validity 10000 -dname "CN=PocketGB Android Release"
-          fi
-
+            -o publish/android
+          APK="$(find publish/android -type f -name '*.apk' -print -quit)"
+          test -n "$APK"
+          mkdir -p dist/android
+          KEYSTORE="$RUNNER_TEMP/pocketgb-oneoff.keystore"
+          keytool -genkeypair -v -keystore "$KEYSTORE" -storepass "PocketGB-OneOff-2026" \
+            -alias pocketgb -keypass "PocketGB-OneOff-2026" -keyalg RSA -keysize 2048 \
+            -validity 10000 -dname "CN=PocketGB Android Release"
           BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
-          "$BUILD_TOOLS/zipalign" -f -v 4 "$APK" ./dist/android/PocketGB-Android-arm64-1.4.0-aligned.apk
-          "$BUILD_TOOLS/apksigner" sign \
-            --ks "$KEYSTORE" \
-            --ks-key-alias "$KEY_ALIAS" \
-            --ks-pass "pass:$STORE_PASS" \
-            --key-pass "pass:$KEY_PASS" \
-            --out ./dist/android/PocketGB-Android-arm64-1.4.0.apk \
-            ./dist/android/PocketGB-Android-arm64-1.4.0-aligned.apk
-          "$BUILD_TOOLS/apksigner" verify --verbose ./dist/android/PocketGB-Android-arm64-1.4.0.apk
-          rm ./dist/android/PocketGB-Android-arm64-1.4.0-aligned.apk
-          sha256sum ./dist/android/PocketGB-Android-arm64-1.4.0.apk > ./dist/android/SHA256-ANDROID.txt
-          ls -lh ./dist/android
+          "$BUILD_TOOLS/zipalign" -f -v 4 "$APK" dist/android/PocketGB-Android-arm64.apk
+          "$BUILD_TOOLS/apksigner" sign --ks "$KEYSTORE" --ks-key-alias pocketgb \
+            --ks-pass pass:PocketGB-OneOff-2026 --key-pass pass:PocketGB-OneOff-2026 \
+            dist/android/PocketGB-Android-arm64.apk
+          "$BUILD_TOOLS/apksigner" verify --verbose dist/android/PocketGB-Android-arm64.apk
+          sha256sum dist/android/PocketGB-Android-arm64.apk > dist/android/SHA256-ANDROID.txt
+          ls -lh dist/android
 
-      - name: Upload Android APK artifact
+      - name: Upload Android package
         uses: actions/upload-artifact@v4
         with:
           name: PocketGB-Android-arm64
           path: |
-            dist/android/PocketGB-Android-arm64-1.4.0.apk
+            dist/android/PocketGB-Android-arm64.apk
             dist/android/SHA256-ANDROID.txt
           if-no-files-found: error
           retention-days: 30
-
-      - name: Wait for the matching Windows release
-        if: "${{ github.event_name == 'push' && startsWith(github.event.head_commit.message, 'release: PocketGB v1.4.0') }}"
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          API="https://api.github.com/repos/$GITHUB_REPOSITORY/releases/tags/pocketgb-v1.4.0"
-          for attempt in $(seq 1 90); do
-            if curl --fail --silent --show-error \
-              -H "Authorization: Bearer $GH_TOKEN" \
-              -H "Accept: application/vnd.github+json" "$API" >/dev/null; then
-              echo "PocketGB v1.4.0 release exists; APK will be attached."
-              exit 0
-            fi
-            sleep 10
-          done
-          echo "Timed out waiting for the Windows release workflow to create PocketGB v1.4.0." >&2
-          exit 1
-
-      - name: Attach APK to PocketGB v1.4.0 release
-        if: "${{ github.event_name == 'push' && startsWith(github.event.head_commit.message, 'release: PocketGB v1.4.0') }}"
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: pocketgb-v1.4.0
-          files: |
-            dist/android/PocketGB-Android-arm64-1.4.0.apk
-            dist/android/SHA256-ANDROID.txt
