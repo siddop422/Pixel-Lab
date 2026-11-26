@@ -2,6 +2,10 @@ cmake_minimum_required(VERSION 3.20)
 
 project(PocketGBMgbaNative LANGUAGES C CXX)
 
+if(ANDROID)
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+endif()
+
 # Link the MSVC C runtime statically so the native DLL does not require a separate VC++ redistributable install.
 if(MSVC)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>" CACHE STRING "" FORCE)
@@ -31,7 +35,11 @@ set(BUILD_SUITE OFF CACHE BOOL "" FORCE)
 set(BUILD_CINEMA OFF CACHE BOOL "" FORCE)
 set(ENABLE_DEBUGGERS OFF CACHE BOOL "" FORCE)
 set(ENABLE_SCRIPTING OFF CACHE BOOL "" FORCE)
-set(USE_PTHREADS OFF CACHE BOOL "" FORCE)
+if(ANDROID)
+    set(USE_PTHREADS ON CACHE BOOL "" FORCE)
+else()
+    set(USE_PTHREADS OFF CACHE BOOL "" FORCE)
+endif()
 
 add_subdirectory("${MGBA_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/mgba")
 
@@ -64,6 +72,12 @@ if(MGBA_TARGET_OPTIONS)
     target_compile_options(pocketgb_mgba PRIVATE ${MGBA_TARGET_OPTIONS})
 endif()
 target_link_libraries(pocketgb_mgba PRIVATE mgba)
+if(ANDROID)
+    find_library(ANDROID_LOG_LIBRARY log)
+    if(ANDROID_LOG_LIBRARY)
+        target_link_libraries(pocketgb_mgba PRIVATE ${ANDROID_LOG_LIBRARY})
+    endif()
+endif()
 
 set_target_properties(pocketgb_mgba PROPERTIES
     OUTPUT_NAME "pocketgb-mgba"

@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-android</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>PocketGB.Android</RootNamespace>
+    <ApplicationId>com.blackspiderstudios.pocketgb</ApplicationId>
+    <ApplicationTitle>PocketGB</ApplicationTitle>
+    <ApplicationVersion>5</ApplicationVersion>
+    <ApplicationDisplayVersion>1.4.0</ApplicationDisplayVersion>
+    <SupportedOSPlatformVersion>23.0</SupportedOSPlatformVersion>
+    <AndroidMinSdkVersion>23</AndroidMinSdkVersion>
+    <AndroidTargetSdkVersion>36</AndroidTargetSdkVersion>
+    <AndroidPackageFormat>apk</AndroidPackageFormat>
+    <RuntimeIdentifiers>android-arm64</RuntimeIdentifiers>
+    <AndroidStripNativeLibraries>true</AndroidStripNativeLibraries>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AndroidNativeLibrary Include="../artifacts/native/android-arm64/libpocketgb-mgba.so">
+      <Abi>arm64-v8a</Abi>
+    </AndroidNativeLibrary>
+    <AndroidAsset Include="../artifacts/native/android-arm64/licenses/mGBA-MPL-2.0.txt"
+                  Link="licenses/mGBA-MPL-2.0.txt" />
+  </ItemGroup>
+</Project>
