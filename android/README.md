@@ -46,7 +46,7 @@ The native core is pinned to mGBA commit [431935616c0e216d650b25b2ea0c0acccd3590
 
 ## Installing the APK
 
-Download `PocketGB-Android-1.5.0.apk` from the [PocketGB v1.5.0 release](https://github.com/siddop422/Pixel-Lab/releases/tag/pocketgb-v1.5.0), enable Android's Install unknown apps permission for the browser/file manager used to open it, then install it. Open PocketGB and press OPEN to choose a ROM from Downloads or another document provider.
+Download `PocketGB-Android-1.6.0.apk` from the [PocketGB v1.6.0 release](https://github.com/siddop422/Pixel-Lab/releases/tag/pocketgb-v1.5.0), enable Android's Install unknown apps permission for the browser/file manager used to open it, then install it. Open PocketGB and press OPEN to choose a ROM from Downloads or another document provider.
 
 ## Signing and updates
 
@@ -54,6 +54,6 @@ The APK is signed so Android can install it. For repeatable upgrade installs, co
 
 ## Compatibility and validation
 
-Windows CI exercises synthetic GB and GBA cartridge boot, frame execution, native framebuffer dimensions and save-state round-trips. Android CI builds the mGBA native library for all four ABIs, checks that all four libraries are packaged into the APK, and verifies its signature. These checks do not replace testing on physical phones or Android emulator images, and do not guarantee every commercial ROM, mapper, accessory or ROM hack works.
+Windows CI exercises synthetic GB, GBC, SGB-flagged GB and GBA cartridge boot, frame execution, framebuffer dimensions and save-state round-trips, including GBA detection with a `.pak` filename. A second suite tests shared raw/ZIP/PAK/7z path handling, archive size limits, corrupt archives and sidecar patch discovery. Android CI builds the mGBA native library for all four ABIs, checks that all four libraries are packaged into the APK, and verifies its signature. These checks do not replace testing on physical phones or Android emulator images, and do not guarantee every commercial ROM, mapper, accessory or ROM hack works.
 
-The exact Balatro GBA and Geometry Dash GB/GBC images have not been included in automated tests. SGB enhancement rendering is not implemented. Report the ROM title, platform, Android device/API level and any reproducible error for compatibility fixes.
+The exact Balatro GBA and Geometry Dash GB/GBC images have not been included in automated tests. Standard `.sgb` cartridge execution is supported, but SGB-specific enhancement rendering is not implemented. RAR, proprietary PAK containers, special cartridge peripherals and unsupported mappers remain outside the compatibility promise. Report the ROM title, platform, Android ABI/device/API level and any reproducible error for compatibility fixes.
