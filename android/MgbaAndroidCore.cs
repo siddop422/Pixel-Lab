@@ -182,10 +182,28 @@ internal sealed class MgbaAndroidCore : IDisposable
     {
         string path = BatteryPath;
         if (!File.Exists(path)) return;
-        byte[] bytes = File.ReadAllBytes(path);
-        if (bytes.Length == 0 || bytes.Length > 16 * 1024 * 1024) return;
-        if (pgb_mgba_savedata_load(_context, bytes, (nuint)bytes.Length) == 0)
-            throw new InvalidDataException("The existing .sav file was rejected by mGBA.");
+        try
+        {
+            byte[] bytes = File.ReadAllBytes(path);
+            if (bytes.Length == 0 || bytes.Length > 16 * 1024 * 1024 ||
+                pgb_mgba_savedata_load(_context, bytes, (nuint)bytes.Length) == 0)
+            {
+                string backup = path + ".corrupt-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmssfff");
+                try
+                {
+                    File.Move(path, backup);
+                    global::Android.Util.Log.Warn("PocketGB", $"Preserved an unreadable battery save at {backup}; starting with fresh save data.");
+                }
+                catch (Exception moveError)
+                {
+                    global::Android.Util.Log.Warn("PocketGB", $"Could not quarantine unreadable save {path}: {moveError.Message}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Warn("PocketGB", $"Could not load battery save {path}; starting fresh: {ex.Message}");
+        }
     }
 
     public string BatteryPath { get; private set; } = string.Empty;
