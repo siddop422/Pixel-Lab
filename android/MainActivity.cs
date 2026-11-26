@@ -6,7 +6,6 @@ using Android.OS;
 using Android.Provider;
 using Android.Views;
 using Android.Widget;
-using Android.Graphics;
 using System.IO;
 
 namespace PocketGB.Android;
@@ -45,7 +44,7 @@ public sealed class MainActivity : Activity
         };
         toolbar.SetGravity(GravityFlags.CenterVertical);
         toolbar.SetPadding(Dp(4), Dp(2), Dp(4), Dp(2));
-        toolbar.SetBackgroundColor(Color.Argb(210, 10, 26, 20));
+        toolbar.SetBackgroundColor(global::Android.Graphics.Color.Argb(210, 10, 26, 20));
 
         AddToolbarButton(toolbar, "OPEN", OpenRom);
         _pauseButton = AddToolbarButton(toolbar, "PAUSE", TogglePause);
@@ -66,7 +65,7 @@ public sealed class MainActivity : Activity
     private Button AddToolbarButton(LinearLayout parent, string text, Action action)
     {
         var button = new Button(this) { Text = text };
-        button.SetTextSize(Android.Util.ComplexUnitType.Sp, 11f);
+        button.SetTextSize(global::Android.Util.ComplexUnitType.Sp, 11f);
         button.SetPadding(Dp(2), 0, Dp(2), 0);
         button.SetAllCaps(false);
         button.Click += (_, _) => action();
@@ -174,7 +173,7 @@ public sealed class MainActivity : Activity
             Window?.InsetsController?.Hide(WindowInsets.Type.StatusBars() | WindowInsets.Type.NavigationBars());
             var controller = Window?.InsetsController;
             if (controller != null)
-                controller.SystemBarsBehavior = WindowInsetsControllerBehavior.ShowTransientBarsBySwipe;
+                controller.SystemBarsBehavior = (int)WindowInsetsControllerBehavior.ShowTransientBarsBySwipe;
         }
         else
         {
