@@ -7,13 +7,13 @@ using System.Security.Cryptography;
 namespace PocketGB.Shared;
 
 /// <summary>
-/// Resolves supported Game Boy-family cartridge files for every PocketGB frontend.
-/// It deliberately does not guess from a filename alone: the native mGBA core validates
-/// the actual cartridge header when the resolved bytes are loaded.
+/// Resolves Game Boy-family cartridges consistently for the desktop, portable and Android front ends.
+/// ROM bytes are still validated by the native mGBA cartridge detector before a game starts.
 /// </summary>
 public static class CartridgeFileLoader
 {
     public const long MaxRomBytes = 32L * 1024L * 1024L;
+    public const long MaxArchiveBytes = 128L * 1024L * 1024L;
 
     private static readonly string[] RomExtensions =
     {
@@ -26,24 +26,29 @@ public static class CartridgeFileLoader
     public static bool IsSupportedRomExtension(string? extension)
     {
         if (string.IsNullOrWhiteSpace(extension)) return false;
-        return RomExtensions.Contains(extension.StartsWith(".", StringComparison.Ordinal)
-            ? extension : "." + extension, StringComparer.OrdinalIgnoreCase);
+        string normalized = extension.StartsWith(".", StringComparison.Ordinal) ? extension : "." + extension;
+        return RomExtensions.Contains(normalized, StringComparer.OrdinalIgnoreCase);
     }
+
+    public static bool IsSevenZipArchive(string? path) =>
+        !string.IsNullOrWhiteSpace(path) &&
+        Path.GetExtension(path).Equals(".7z", StringComparison.OrdinalIgnoreCase);
 
     public static bool IsSupportedGameFileName(string? fileName)
     {
         if (string.IsNullOrWhiteSpace(fileName)) return false;
         string extension = Path.GetExtension(fileName);
         return extension.Equals(".zip", StringComparison.OrdinalIgnoreCase) ||
+               IsSevenZipArchive(extension) ||
                IsSupportedRomExtension(extension);
     }
 
     public static string[] GetSupportedExtensions() =>
-        RomExtensions.Concat(new[] { ".zip" }).ToArray();
+        RomExtensions.Concat(new[] { ".zip", ".7z" }).ToArray();
 
     /// <summary>
-    /// Returns a direct cartridge path unchanged, or extracts one ROM from a ZIP into a
-    /// content-addressed cache. ZIP entries are bounded by both advertised and actual size.
+    /// Returns a direct ROM unchanged, extracts a ROM from ZIP into a content-addressed cache,
+    /// or leaves a 7z archive for mGBA's built-in LZMA/VFS reader.
     /// </summary>
     public static string ResolveRomPath(string path, string cacheDirectory)
     {
@@ -57,42 +62,52 @@ public static class CartridgeFileLoader
             throw new FileNotFoundException("The selected game file could not be found.", fullPath);
 
         string extension = Path.GetExtension(fullPath);
+        if (extension.Equals(".7z", StringComparison.OrdinalIgnoreCase))
+        {
+            long archiveSize = new FileInfo(fullPath).Length;
+            if (archiveSize <= 0 || archiveSize > MaxArchiveBytes)
+                throw new InvalidDataException("7z archives must be between 1 byte and 128 MiB.");
+            return fullPath;
+        }
+
         if (!extension.Equals(".zip", StringComparison.OrdinalIgnoreCase))
         {
             if (!IsSupportedRomExtension(extension))
             {
                 throw new InvalidDataException(
-                    "Supported files: GB, GBC, SGB, GBA, GBX and raw ROM aliases (.agb, .dmg, .cgb, .bin, .rom), or a ZIP containing one.");
+                    "Supported games: GB, GBC, SGB, GBA, GBX, BIN and ROM images, or ZIP/7z archives.");
             }
 
             long directSize = new FileInfo(fullPath).Length;
             if (directSize <= 0 || directSize > MaxRomBytes)
-                throw new InvalidDataException($"Cartridge images must be between 1 byte and {MaxRomBytes / (1024 * 1024)} MiB.");
+                throw new InvalidDataException("Cartridge images must be between 1 byte and 32 MiB.");
             return fullPath;
         }
+
+        long zipSize = new FileInfo(fullPath).Length;
+        if (zipSize <= 0 || zipSize > MaxArchiveBytes)
+            throw new InvalidDataException("ZIP archives must be between 1 byte and 128 MiB.");
 
         using ZipArchive archive = ZipFile.OpenRead(fullPath);
         var candidates = archive.Entries
             .Where(entry => !string.IsNullOrEmpty(entry.Name))
             .Where(entry => IsSupportedRomExtension(Path.GetExtension(entry.Name)))
             .Where(entry => entry.Length > 0 && entry.Length <= MaxRomBytes)
-            .OrderBy(entry => entry.FullName.Count(ch => ch == '/' || ch == '\\'))
+            .OrderBy(entry => entry.FullName.Count(ch => ch == '/' || ch == '\\\\'))
             .ThenBy(entry => entry.FullName, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         if (candidates.Count == 0)
-            throw new InvalidDataException("This ZIP contains no supported GB, GBC, SGB, GBA or GBX cartridge image under 32 MiB.");
+            throw new InvalidDataException("This ZIP contains no supported GB, GBC, SGB, GBA or GBX cartridge under 32 MiB.");
 
-        // Prefer root-level entries and use a stable ordinal order if the archive has multiple ROMs.
         ZipArchiveEntry selected = candidates[0];
         string archiveHash;
         using (FileStream input = File.OpenRead(fullPath))
             archiveHash = Convert.ToHexString(SHA256.HashData(input)).ToLowerInvariant();
 
         string cacheFolder = Path.Combine(Path.GetFullPath(cacheDirectory), archiveHash);
-        string safeName = Path.GetFileName(selected.FullName.Replace('\\', '/'));
-        if (string.IsNullOrWhiteSpace(safeName))
-            safeName = "cartridge.gb";
+        string safeName = Path.GetFileName(selected.FullName.Replace('\\\\', '/'));
+        if (string.IsNullOrWhiteSpace(safeName)) safeName = "cartridge.gb";
         foreach (char invalid in Path.GetInvalidFileNameChars())
             safeName = safeName.Replace(invalid, '_');
 
@@ -124,8 +139,7 @@ public static class CartridgeFileLoader
         }
         catch
         {
-            if (File.Exists(temporary))
-                File.Delete(temporary);
+            if (File.Exists(temporary)) File.Delete(temporary);
             throw;
         }
 
@@ -133,10 +147,7 @@ public static class CartridgeFileLoader
         return destination;
     }
 
-    /// <summary>
-    /// Finds a matching sidecar patch. mGBA supports IPS, UPS and BPS; BPS is preferred
-    /// when more than one patch is present, matching mGBA's own patch search order.
-    /// </summary>
+    /// <summary>Finds sidecar patches in mGBA's priority order: BPS, UPS, then IPS.</summary>
     public static string? FindSidecarPatch(params string?[] romPaths)
     {
         foreach (string extension in PatchExtensions)
@@ -146,7 +157,12 @@ public static class CartridgeFileLoader
                 if (string.IsNullOrWhiteSpace(path)) continue;
                 string candidate = Path.ChangeExtension(Path.GetFullPath(path), extension);
                 if (File.Exists(candidate))
+                {
+                    long size = new FileInfo(candidate).Length;
+                    if (size <= 0 || size > MaxRomBytes)
+                        throw new InvalidDataException($"The {extension} patch is empty or exceeds the 32 MiB safety limit.");
                     return candidate;
+                }
             }
         }
         return null;
