@@ -332,6 +332,11 @@ PGB_EXPORT int pgb_mgba_apply_patch(void* handle, const uint8_t* patch_data, siz
 
     ctx->core->reset(ctx->core);
     ctx->core->currentVideoSize(ctx->core, &ctx->video_width, &ctx->video_height);
+    struct mGameInfo patched_info;
+    memset(&patched_info, 0, sizeof(patched_info));
+    ctx->core->getGameInfo(ctx->core, &patched_info);
+    snprintf(ctx->title, sizeof(ctx->title), "%s", patched_info.title);
+    snprintf(ctx->game_code, sizeof(ctx->game_code), "%s", patched_info.code);
     ctx->error[0] = '\0';
     return 1;
 }
