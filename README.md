@@ -28,21 +28,19 @@ Read the [Android install/build guide](android/README.md). The APK is signed for
 
 ## What's new in 1.6.0
 
-- Native mGBA core for Game Boy Advance, Game Boy and Game Boy Color on Windows x64 and Android arm64, ARMv7, x86_64 and x86.
-- Emulation core selector: Auto, GameboySharp (GB/GBC), and mGBA (GB/GBC/GBA).
-- Auto prefers mGBA for `.gba`, `.gb`, `.gbc`, and `.sgb` files for broader compatibility; GameboySharp remains a selectable manual GB/GBC fallback.
-- GBA output at 240×160 with dynamic aspect-ratio scaling; GB/GBC output remains 160×144.
-- mGBA input mapping for GBA controls, stereo audio, battery saves, reset, and quick save/load state.
-- Real frame-based speed multipliers and configurable Tab turbo (2×–16×); faster render FPS is shown separately from actual emulated game FPS.
-- Core-only mGBA native DLL build, pinned upstream source revision, and MPL-2.0 notice included in the portable package.
-- Reduced self-contained publish size by disabling ReadyToRun images; installer uses LZMA2/ultra64 compression.
-
+- Unified ROM loading across the Windows desktop app, portable ZIP and Android APK.
+- Native mGBA 7z support, including nested folders, plus ZIP and ZIP-based PAK detection.
+- Automatic desktop IPS/UPS/BPS sidecar patch loading; Android has an explicit PATCH action for IPS/UPS/BPS.
+- Broader raw cartridge filename aliases including .gbx, .agb, .dmg, .cgb, .bin, .rom and .pak; mGBA validates the actual ROM header.
+- Automated coverage for GB, GBC, SGB-flagged GB, GBA, ZIP imports, PAK aliases, corrupt/oversized inputs and save-state round-trips.
+- Damaged battery saves are preserved as .corrupt-* backups instead of preventing an otherwise valid game from opening.
+- Universal Android APK retains all four ABIs: ARM64, ARMv7, x86_64 and x86.
 ## Systems and cartridge compatibility
 
 | System / cartridge | Status |
 | --- | --- |
-| Original Game Boy (DMG) | GameboySharp core |
-| Game Boy Color (CGB) | mGBA in Auto mode; GameboySharp selectable as fallback |
+| Original Game Boy (DMG) | mGBA in Auto mode; GameboySharp manual fallback |
+| Game Boy Color (CGB) | mGBA in Auto mode; GameboySharp manual fallback |
 | Game Boy Advance (GBA) | mGBA native core on Windows x64 and all four Android ABIs |
 | Standard ROM-only, MBC1, MBC2, MBC3, and MBC5 | Implemented by GameboySharp |
 | Standard ROM+RAM and ROM+RAM+battery (0x08/0x09) | Implemented by GameboySharp |
@@ -105,14 +103,15 @@ Gamepad D-pad, face buttons, Start/Back and shoulder/trigger buttons are mapped 
 
 ## Saves and supported files
 
-- Direct `.gb`, `.gbc`, `.sgb`, and `.gba` cartridge images.
-- ZIP archives containing supported GB/GBC/GBA ROMs.
-- GameboySharp: ten save-state slots, quick save/load and battery-backed `.sav` files, including MBC3 RTC data.
-- mGBA: quick save/load state (`.state0`) and battery-backed `.sav` data.
-- Saves are written beside the original ROM or ZIP, or to the optional configured save folder.
-- ZIP extraction is cached; replacing an archive invalidates the old cache. Save files remain beside the original ZIP, not in the cache.
-- Raw cartridge images and extracted archive entries are limited to 32 MiB; ZIP/7z/ZIP-based PAK containers are limited to 128 MiB. RAR archives are not supported.\n- Unreadable battery saves are quarantined as `.corrupt-*` backups so they do not prevent game startup.
-
+- Direct .gb, .gbc, .sgb, .gba and raw-image aliases .gbx, .agb, .dmg, .cgb, .bin, .rom and .pak. An alias is accepted only when mGBA recognises the actual cartridge header.
+- ZIP and 7z archives containing supported GB/GBC/GBA cartridges. ZIP/7z entries are selected in deterministic folder-depth and filename order; nested 7z folders are scanned.
+- ZIP containers renamed .pak are identified by the PKZIP signature. Other .pak files are treated as raw ROM candidates, not as a promise to support every proprietary game-engine PAK archive.
+- IPS/UPS/BPS patches: Windows desktop applies matching sidecar patches automatically (BPS, then UPS, then IPS); Android provides a PATCH button for manual patch selection.
+- GameboySharp: ten save-state slots, quick save/load and battery-backed .sav files, including MBC3 RTC data.
+- mGBA: quick save/load state (.state0) and battery-backed .sav data.
+- Saves for ZIP-launched games remain beside the original archive rather than inside the extracted ROM cache.
+- Raw ROMs and extracted archive entries are limited to 32 MiB; ZIP, 7z and ZIP-based PAK containers are limited to 128 MiB. RAR is not supported.
+- Unreadable battery saves are preserved as timestamped .corrupt-* backups so they do not block game startup.
 ## Requirements
 
 - Windows 10/11 x64 for the desktop app.
