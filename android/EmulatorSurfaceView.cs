@@ -2,6 +2,7 @@ using Android.Content;
 using Android.Graphics;
 using Android.Media;
 using Android.Views;
+using PocketGB.Shared;
 using System.Diagnostics;
 using System.IO;
 
