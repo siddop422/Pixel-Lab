@@ -22,6 +22,9 @@ internal sealed class EmulatorSurfaceView : SurfaceView, ISurfaceHolderCallback,
     private bool _paused;
     private bool _turbo;
     private double _speed = 1.0;
+    private static readonly double[] TurboSpeedOptions = { 2.0, 4.0, 6.0, 8.0, 12.0, 16.0 };
+    private int _turboSpeedIndex = 1;
+    private double _turboSpeed = 4.0;
     private uint _touchKeys;
     private uint _hardwareKeys;
     private int[] _bitmapPixels = Array.Empty<int>();
@@ -33,6 +36,7 @@ internal sealed class EmulatorSurfaceView : SurfaceView, ISurfaceHolderCallback,
     private double _renderFps;
     private double _gameFps;
     private int _framesInSample;
+    private int _renderFramesInSample;
     private readonly Stopwatch _fpsWatch = Stopwatch.StartNew();
     private string _status = "Tap OPEN to choose a game";
     private string _gameTitle = "";
@@ -40,6 +44,7 @@ internal sealed class EmulatorSurfaceView : SurfaceView, ISurfaceHolderCallback,
     public bool IsPaused { get { lock (_coreLock) return _paused; } }
     public bool TurboActive { get { lock (_coreLock) return _turbo; } }
     public double SpeedMultiplier { get { lock (_coreLock) return _speed; } }
+    public double TurboSpeedMultiplier { get { lock (_coreLock) return _turboSpeed; } }
 
     public EmulatorSurfaceView(Context context, string filesDirectory) : base(context)
     {
@@ -93,7 +98,31 @@ internal sealed class EmulatorSurfaceView : SurfaceView, ISurfaceHolderCallback,
 
     public void ToggleTurbo()
     {
-        lock (_coreLock) _turbo = !_turbo;
+        lock (_coreLock)
+        {
+            _turbo = !_turbo;
+            if (_turbo && _audioTrack != null)
+            {
+                // Remove queued normal-speed audio before fast-forward starts.
+                try
+                {
+                    _audioTrack.Pause();
+                    _audioTrack.Flush();
+                    _audioTrack.Play();
+                }
+                catch { }
+            }
+        }
+    }
+
+    public double CycleTurboSpeed()
+    {
+        lock (_coreLock)
+        {
+            _turboSpeedIndex = (_turboSpeedIndex + 1) % TurboSpeedOptions.Length;
+            _turboSpeed = TurboSpeedOptions[_turboSpeedIndex];
+            return _turboSpeed;
+        }
     }
 
     public void Reset()
@@ -249,9 +278,10 @@ internal sealed class EmulatorSurfaceView : SurfaceView, ISurfaceHolderCallback,
 
     private void GameLoop()
     {
-        var timer = Stopwatch.StartNew();
+        var gameFpsTimer = Stopwatch.StartNew();
         long last = Stopwatch.GetTimestamp();
-        double accumulator = 0;
+        var framePacer = new EmulationFramePacer(maxFramesPerBatch: 32, maxBacklogFrames: 32);
+        int turboRenderCounter = 0;
         _ = EnsurePixelBuffer(256 * 224);
 
         while (!_stop)
@@ -259,9 +289,10 @@ internal sealed class EmulatorSurfaceView : SurfaceView, ISurfaceHolderCallback,
             long now = Stopwatch.GetTimestamp();
             double delta = Math.Clamp((now - last) / (double)Stopwatch.Frequency, 0, 0.1);
             last = now;
-            bool runFrame = false;
             int framesToRun = 0;
             double fps = 59.7275;
+            bool turboActive = false;
+            double turboMultiplier = 4.0;
             uint keys;
             lock (_inputLock) keys = _touchKeys | _hardwareKeys;
 
@@ -270,10 +301,10 @@ internal sealed class EmulatorSurfaceView : SurfaceView, ISurfaceHolderCallback,
                 _core.SetKeys(keys);
                 if (_core.HasRom && !_paused)
                 {
-                    double multiplier = _turbo ? 4.0 : _speed;
-                    accumulator += delta * multiplier * _core.FrameRate;
-                    framesToRun = Math.Min(8, (int)accumulator);
-                    accumulator -= framesToRun;
+                    turboActive = _turbo;
+                    turboMultiplier = _turboSpeed;
+                    double multiplier = turboActive ? turboMultiplier : _speed;
+                    framesToRun = framePacer.Consume(delta, multiplier, _core.FrameRate);
                     fps = _core.FrameRate;
                     for (int i = 0; i < framesToRun; i++)
                     {
@@ -281,26 +312,40 @@ internal sealed class EmulatorSurfaceView : SurfaceView, ISurfaceHolderCallback,
                         _framesInSample++;
                     }
                     if (framesToRun > 0) _core.CopyPixelsArgb(EnsurePixelBuffer(_core.Width * _core.Height));
-                    PumpAudio();
+                    // AudioTrack.Write is blocking. Drain mGBA's queue, but do not write during
+                    // turbo, otherwise audio playback limits the emulation speed.
+                    PumpAudio(discardOutput: turboActive);
                 }
                 else
                 {
-                    accumulator = 0;
+                    framePacer.Reset();
+                    PumpAudio(discardOutput: true);
                 }
 
-                if (timer.Elapsed.TotalSeconds >= 0.5)
+                if (gameFpsTimer.Elapsed.TotalSeconds >= 0.5)
                 {
-                    _gameFps = _framesInSample / Math.Max(0.001, timer.Elapsed.TotalSeconds);
+                    _gameFps = _framesInSample / Math.Max(0.001, gameFpsTimer.Elapsed.TotalSeconds);
                     _framesInSample = 0;
-                    timer.Restart();
+                    gameFpsTimer.Restart();
                 }
             }
 
-            RenderFrame();
+            int renderInterval = turboActive ? (turboMultiplier >= 8.0 ? 3 : 2) : 1;
+            bool renderNow = !turboActive || (++turboRenderCounter % renderInterval == 0);
+            if (renderNow) RenderFrame();
+
             long usedTicks = Stopwatch.GetTimestamp() - now;
-            double remainingMs = (1000.0 / 60.0) - usedTicks * 1000.0 / Stopwatch.Frequency;
-            if (remainingMs > 1) Thread.Sleep(Math.Max(1, (int)remainingMs));
-            else if (remainingMs > 0) Thread.SpinWait(20);
+            if (turboActive)
+            {
+                // Yield briefly instead of sleeping at 60 Hz; render less often to prioritize emulation.
+                Thread.Yield();
+            }
+            else
+            {
+                double remainingMs = (1000.0 / 60.0) - usedTicks * 1000.0 / Stopwatch.Frequency;
+                if (remainingMs > 1) Thread.Sleep(Math.Max(1, (int)remainingMs));
+                else if (remainingMs > 0) Thread.SpinWait(20);
+            }
         }
     }
 
@@ -331,15 +376,15 @@ internal sealed class EmulatorSurfaceView : SurfaceView, ISurfaceHolderCallback,
         }
     }
 
-    private void PumpAudio()
+    private void PumpAudio(bool discardOutput = false)
     {
-        if (_audioTrack == null) return;
+        // Always drain the native queue, even while muted or when AudioTrack is unavailable.
         int available = _core.AudioAvailable;
         if (available <= 0) return;
         int sampleCount = available * 2;
         if (_audioBuffer.Length < sampleCount) _audioBuffer = new short[sampleCount];
         int read = _core.ReadAudio(_audioBuffer, available);
-        if (read > 0)
+        if (read > 0 && !discardOutput && _audioTrack != null)
         {
             try { _audioTrack.Write(_audioBuffer, 0, read * 2); }
             catch { _audioTrack?.Pause(); }
@@ -354,6 +399,15 @@ internal sealed class EmulatorSurfaceView : SurfaceView, ISurfaceHolderCallback,
         {
             canvas = Holder.LockCanvas();
             if (canvas == null) return;
+
+            _renderFramesInSample++;
+            if (_fpsWatch.Elapsed.TotalSeconds >= 0.5)
+            {
+                _renderFps = _renderFramesInSample / Math.Max(0.001, _fpsWatch.Elapsed.TotalSeconds);
+                _renderFramesInSample = 0;
+                _fpsWatch.Restart();
+            }
+
             canvas.DrawColor(Color.Rgb(14, 19, 17));
 
             lock (_coreLock)
@@ -449,7 +503,9 @@ internal sealed class EmulatorSurfaceView : SurfaceView, ISurfaceHolderCallback,
         string title = string.IsNullOrWhiteSpace(_gameTitle) ? _status : _gameTitle;
         canvas.DrawText(title, canvas.Width * 0.025f, canvas.Height * 0.17f, _paint);
         _paint.TextAlign = Paint.Align.Right;
-        canvas.DrawText($"GAME {_gameFps:0.0} FPS  •  RENDER 60", canvas.Width * 0.975f, canvas.Height * 0.17f, _paint);
+        string mode = _turbo ? $"FAST {_turboSpeed:0.#}x" : $"SPEED {_speed:0.##}x";
+        canvas.DrawText($"GAME {_gameFps:0.0} FPS  •  RENDER {_renderFps:0}  •  {mode}",
+            canvas.Width * 0.975f, canvas.Height * 0.17f, _paint);
         if (!string.IsNullOrWhiteSpace(_status) && !_core.HasRom)
         {
             _paint.TextAlign = Paint.Align.Center;
