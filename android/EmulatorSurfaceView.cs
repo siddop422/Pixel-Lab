@@ -290,7 +290,6 @@ internal sealed class EmulatorSurfaceView : SurfaceView, ISurfaceHolderCallback,
             double delta = Math.Clamp((now - last) / (double)Stopwatch.Frequency, 0, 0.1);
             last = now;
             int framesToRun = 0;
-            double fps = 59.7275;
             bool turboActive = false;
             double turboMultiplier = 4.0;
             uint keys;
@@ -305,7 +304,6 @@ internal sealed class EmulatorSurfaceView : SurfaceView, ISurfaceHolderCallback,
                     turboMultiplier = _turboSpeed;
                     double multiplier = turboActive ? turboMultiplier : _speed;
                     framesToRun = framePacer.Consume(delta, multiplier, _core.FrameRate);
-                    fps = _core.FrameRate;
                     for (int i = 0; i < framesToRun; i++)
                     {
                         _core.RunFrame();
