@@ -27,7 +27,9 @@ No commercial ROMs or BIOS dumps are included; mGBA's HLE BIOS defaults are used
   - `x86` — 32-bit x86 Android emulators and devices.
 - Full-screen landscape play, touch D-pad, A/B, L/R, Start and Select buttons.
 - External keyboards and game controllers where Android reports standard key events.
-- Stereo AudioTrack output, pause, reset, speed, turbo, quick save and quick load.
+- Stereo AudioTrack output, pause, reset, normal speed (0.5x / 1x / 2x), quick save and quick load.
+- The **FAST** button cycles turbo speed through 2x, 4x, 6x, 8x, 12x and 16x; **TURBO** toggles fast-forward on and off.
+- During turbo, generated audio is drained without sending it to Android's blocking audio output, and the display is redrawn less often so the CPU can prioritize emulation. Actual speed depends on the device and game.
 - Game ROMs are copied to app-private storage using content-addressed filenames so two different games with the same source filename do not overwrite each other's saves.
 - Battery saves (`.sav`) and quick states (`.state0`) are stored beside the app-private ROM copy.
 
