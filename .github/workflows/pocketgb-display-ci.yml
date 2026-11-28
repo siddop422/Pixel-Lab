@@ -189,6 +189,7 @@ jobs:
           files: |
             dist/PocketGB-Setup-1.7.0.exe
             dist/PocketGB-Portable-1.7.0.zip
+            dist/PocketGB-Portable-1.7.0.7z
             dist/SHA256SUMS.txt
           body: |
             PocketGB 1.7.0 — Windows and Android release.
