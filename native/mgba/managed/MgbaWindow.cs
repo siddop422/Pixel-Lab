@@ -193,7 +193,7 @@ internal sealed class MgbaWindow : IDisposable
         {
             if (!_core.LoadState()) throw new FileNotFoundException("No mGBA quick-save state exists for this game yet.");
         }, "Load state");
-        if (WasPressed(Key.F9, keyboard)) RunUiAction(_core.Reset, "Reset");
+        if (WasPressed(Key.F9, keyboard)) RunUiAction(ResetCore, "Reset");
     }
 
     private static bool IsDown(Key key, IKeyboard? keyboard) => keyboard?.IsKeyPressed(key) ?? false;
@@ -229,6 +229,15 @@ internal sealed class MgbaWindow : IDisposable
         bool previous = _previousKeys.TryGetValue(key, out bool wasDown) && wasDown;
         _previousKeys[key] = down;
         return down && !previous;
+    }
+
+    private void ResetCore()
+    {
+        _core.Reset();
+        _core.IsPaused = false;
+        _emulationFaulted = false;
+        _turboActive = false;
+        _lastError = "";
     }
 
     private void RunUiAction(Action action, string name)
@@ -314,7 +323,7 @@ internal sealed class MgbaWindow : IDisposable
             if (ImGui.Button(_core.IsPaused ? "Play" : "Pause"))
                 _core.IsPaused = !_core.IsPaused;
             ImGui.SameLine();
-            if (ImGui.Button("Reset")) RunUiAction(_core.Reset, "Reset");
+            if (ImGui.Button("Reset")) RunUiAction(ResetCore, "Reset");
             ImGui.SameLine();
             if (ImGui.Button("Save")) RunUiAction(_core.SaveState, "Save state");
             ImGui.SameLine();
@@ -377,6 +386,11 @@ internal sealed class MgbaWindow : IDisposable
             ImGui.TextWrapped(_lastError);
             if (ImGui.Button("Copy error report"))
                 ImGui.SetClipboardText(CrashReporter.BuildClipboardText(_lastError));
+            if (_core.HasRom && _emulationFaulted)
+            {
+                ImGui.SameLine();
+                if (ImGui.Button("Reset and retry")) RunUiAction(ResetCore, "Reset and retry");
+            }
             ImGui.SameLine();
             if (ImGui.Button("Dismiss")) _lastError = "";
         }
