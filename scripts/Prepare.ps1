@@ -505,17 +505,30 @@ public class Program
                 elapsedSeconds,
                 requestedSpeed,
                 GameboyConstants.FramesPerSecond,
-                paused: !emulator.HasRom || emulator.IsPaused);
+                paused: !emulator.HasRom || emulator.IsPaused || gameWindow.HasRuntimeError);
 
-            if (framesToRun > 0)
+            if (!gameWindow.HasRuntimeError)
             {
-                emulator.RunFrames(framesToRun);
-                gameWindow.RecordEmulatedFrames(framesToRun);
-            }
-            else
-            {
-                // Keep audio serviced while paused or during half-speed fractional intervals.
-                emulator.RunFrames(0);
+                try
+                {
+                    if (framesToRun > 0)
+                    {
+                        emulator.RunFrames(framesToRun);
+                        gameWindow.RecordEmulatedFrames(framesToRun);
+                    }
+                    else
+                    {
+                        // Keep audio serviced while paused or during half-speed fractional intervals.
+                        emulator.RunFrames(0);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // A single-game emulation failure is shown in the window and saved as a
+                    // copyable report instead of closing PocketGB's message loop.
+                    gameWindow.ReportRuntimeError(ex);
+                    framePacer.Reset();
+                }
             }
 
             // During turbo, reduce GL/UI presentation work so the CPU can spend more time
