@@ -72,6 +72,28 @@ internal static class CrashReporter
         catch { /* A crash reporter must never throw into the emulation loop. */ }
     }
 
+    public static string? GetRecentCrashNotice()
+    {
+        try
+        {
+            string? latestPath = null;
+            DateTime latest = DateTime.MinValue;
+            foreach (string path in new[] { LastErrorPath, NativeCrashPath })
+            {
+                if (!File.Exists(path)) continue;
+                DateTime changed = File.GetLastWriteTimeUtc(path);
+                if (changed > latest) { latest = changed; latestPath = path; }
+            }
+
+            // Only surface recent failures; old logs stay available without warning on every launch.
+            if (latestPath == null || latest < DateTime.UtcNow.AddDays(-2))
+                return null;
+
+            return $"PocketGB recorded an error during a previous run. Details: {latestPath}";
+        }
+        catch { return null; }
+    }
+
     public static string BuildClipboardText(string visibleMessage)
     {
         var text = new StringBuilder();
