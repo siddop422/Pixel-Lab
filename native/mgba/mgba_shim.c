@@ -60,9 +60,9 @@ static void pgb_write_native_crash(const char* kind, const char* details) {
     SYSTEMTIME now;
     GetLocalTime(&now);
     fprintf(output,
-        "[%04u-%02u-%02u %02u:%02u:%02u.%03u] %s\\r\\n"
-        "Operation: %s\\r\\n"
-        "Details: %s\\r\\n\\r\\n",
+        "[%04u-%02u-%02u %02u:%02u:%02u.%03u] %s\r\n"
+        "Operation: %s\r\n"
+        "Details: %s\r\n\r\n",
         now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond, now.wMilliseconds,
         kind ? kind : "Native failure",
         g_active_operation,
