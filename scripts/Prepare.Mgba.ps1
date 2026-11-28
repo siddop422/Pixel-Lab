@@ -165,6 +165,8 @@ $window = [System.IO.File]::ReadAllText($windowPath)
 $window = Replace-ExactlyOnce $window '        private readonly Toolbar _toolbar;' @'
         private readonly Toolbar _toolbar;
         public Action<string>? OpenMgbaGameRequested { get; set; }
+        private string _runtimeError = "";
+        public bool HasRuntimeError => !string.IsNullOrWhiteSpace(_runtimeError);
 '@ "mGBA game routing callback"
 
 $loadStart = $window.IndexOf("        private void LoadRomFromUi(string path)")
@@ -194,18 +196,66 @@ $newLoadMethod = @'
                 }
 
                 _emulator.LoadRom(resolvedPath, path);
+                _runtimeError = "";
                 _config.AddRecentRom(path);
                 ConfigStore.Save(_config);
                 Log.Information("Loaded ROM with GameboySharp: {Path}", path);
             }
             catch (Exception ex)
             {
+                _runtimeError = CrashReporter.WriteException("Load Game Boy cartridge", path, ex);
                 Log.Error(ex, "Failed to load ROM: {Path}", path);
             }
         }
 
 '@
 $window = $window.Substring(0, $loadStart) + $newLoadMethod + $window.Substring($loadEnd)
+
+$reportMethod = @'
+        public void ReportRuntimeError(Exception exception)
+        {
+            _emulator.Cpu.Pause();
+            _turboActive = false;
+            _runtimeError = CrashReporter.WriteException(
+                "Run Game Boy emulation frame", _emulator.CurrentRomName, exception);
+            Log.Error(exception, "PocketGB stopped Game Boy emulation after a recoverable error.");
+        }
+
+'@
+$window = Replace-ExactlyOnce $window '        private void OnLoad()' ($reportMethod + '        private void OnLoad()') "runtime error reporting method"
+
+$drawAnchor = @'
+            _settingsDialog.Draw();
+            DrawResetConfirm();
+'@
+$drawReplacement = @'
+            _settingsDialog.Draw();
+            DrawResetConfirm();
+            DrawRuntimeError();
+'@
+$window = Replace-ExactlyOnce $window $drawAnchor $drawReplacement "runtime error panel call"
+
+$runtimeErrorUi = @'
+        private void DrawRuntimeError()
+        {
+            if (string.IsNullOrWhiteSpace(_runtimeError)) return;
+            var viewport = ImGui.GetMainViewport();
+            ImGui.SetNextWindowPos(viewport.Pos + new Vector2(16f, Toolbar.HeightPoints + 12f), ImGuiCond.Always);
+            ImGui.SetNextWindowBgAlpha(0.94f);
+            if (ImGui.Begin("PocketGB paused after an error", ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoCollapse))
+            {
+                ImGui.TextWrapped(_runtimeError);
+                if (ImGui.Button("Copy error report"))
+                    ImGui.SetClipboardText(CrashReporter.BuildClipboardText(_runtimeError));
+                ImGui.SameLine();
+                if (ImGui.Button("Dismiss")) _runtimeError = "";
+                ImGui.TextDisabled("The emulator is paused. Open another game to continue.");
+            }
+            ImGui.End();
+        }
+
+'@
+$window = Replace-ExactlyOnce $window '        private void ComputeGameViewport(' ($runtimeErrorUi + '        private void ComputeGameViewport(') "runtime error panel method"
 [System.IO.File]::WriteAllText($windowPath, $window, [System.Text.UTF8Encoding]::new($false))
 
 # Include the managed adapters and built native DLL in the Windows app publish directory.
