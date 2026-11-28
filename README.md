@@ -4,27 +4,38 @@
 
 PocketGB is a lightweight Windows desktop and Android emulator for Nintendo Game Boy, Game Boy Color, and Game Boy Advance cartridges. It uses the native mGBA core for broad cartridge compatibility, with save states, battery saves, keyboard/gamepad/touch input, configurable display filters, speed controls, and self-contained releases.
 
-## Next build: v1.7.0 (CI validation pending)\n\nThe next build is being prepared with a compressed single-file Windows executable, a `PocketGB` portable folder, ZIP and maximum-compression LZMA2/7z archives, safer native mGBA initialisation cleanup, recoverable frame errors, copyable diagnostics, and app-local Visual C++ runtime files so the Windows build does not require a separate VC++ Redistributable install. See [the v1.7.0 release notes](docs/RELEASE-1.7.0.md). This is a preview of work in progress; **v1.6.0 remains the latest published release until v1.7.0 passes CI and is attached to GitHub Releases.**\n\nWhen v1.7.0 is ready, native crash reports will be written to `%LOCALAPPDATA%\\PocketGB\\logs\\native-crash.txt`; managed error reports and application logs go in the same `logs` folder.\n\n## Latest Windows build
+## Latest release: PocketGB 1.7.0
 
-The current release is **PocketGB 1.6.0**. Download the [Windows installer](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.6.0/PocketGB-Setup-1.6.0.exe), [portable ZIP](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.6.0/PocketGB-Portable-1.6.0.zip), or [Android APK](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.6.0/PocketGB-Android-1.6.0.apk). Verify Windows downloads with [SHA256SUMS.txt](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.6.0/SHA256SUMS.txt) and the APK with [SHA256-ANDROID.txt](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.6.0/SHA256-ANDROID.txt). See [all PocketGB releases](https://github.com/siddop422/Pixel-Lab/releases).
+<text>Released November 28, 2026.</text> Download the [Windows installer](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.7.0/PocketGB-Setup-1.7.0.exe), [maximum-compression portable 7z](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.7.0/PocketGB-Portable-1.7.0.7z), [portable ZIP](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.7.0/PocketGB-Portable-1.7.0.zip), or [Android APK](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.7.0/PocketGB-Android-1.7.0.apk). Verify Windows downloads with [SHA256SUMS.txt](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.7.0/SHA256SUMS.txt) and the APK with [SHA256-ANDROID.txt](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.7.0/SHA256-ANDROID.txt). See [all PocketGB releases](https://github.com/siddop422/Pixel-Lab/releases).
 
 | Download | What it is |
 | --- | --- |
-| **PocketGB-Setup-1.6.0.exe** | Windows 10/11 x64 installer. Installs per-user and upgrades the existing PocketGB installation. |
-| **PocketGB-Portable-1.6.0.zip** | Self-contained Windows x64 portable build. Extract and run `PocketGB.exe`. |
-| **SHA256SUMS.txt / SHA256-ANDROID.txt** | SHA-256 hashes for Windows and Android downloads. |
+| **PocketGB-Setup-1.7.0.exe** | Windows 10/11 x64 per-user installer. It upgrades the existing PocketGB install. |
+| **PocketGB-Portable-1.7.0.7z** | Smallest portable download; solid LZMA2 maximum compression. |
+| **PocketGB-Portable-1.7.0.zip** | Portable folder for tools that prefer ZIP. |
+| **PocketGB-Android-1.7.0.apk** | Universal Android APK with four native CPU architectures. |
+| **SHA256SUMS.txt / SHA256-ANDROID.txt** | SHA-256 checksums for the Windows packages and Android APK. |
 
-The installer retains the same application ID and install folder, so running a newer setup over PocketGB 1.2.0 upgrades that installation instead of creating a second app entry. User configuration and game saves remain separate from the application directory.
+The portable archives contain one `PocketGB` folder. Extract it, open the folder and run `PocketGB.exe`; the native mGBA engine and runtime support files are kept beside the executable. `START-HERE.txt` is included in the folder.
 
-**Safe download guidance:** download only from the official GitHub Releases page. Compare the installer/ZIP hash with `SHA256SUMS.txt` before running it. The installer is not Authenticode-signed; SmartScreen may show an unknown-publisher warning. A checksum confirms file integrity, not publisher identity.
+**Crash diagnostics:** managed errors and application logs are saved in `%LOCALAPPDATA%\PocketGB\logs`. Native Windows runtime errors are recorded in `native-crash.txt`. Use the in-app **Copy error report** action to collect the latest report.
+
+The installer keeps the same application ID and install folder, so it upgrades an existing PocketGB installation. User configuration and game saves stay separate from the application directory. The installer is not Authenticode-signed; compare downloads with the published checksums.
 
 ## Android APK
 
-PocketGB 1.6.0 also includes a native Android app for Android 6.0+ on ARM64, ARMv7, x86_64 and x86 devices. Download the [PocketGB Android APK](https://github.com/siddop422/Pixel-Lab/releases/download/pocketgb-v1.6.0/PocketGB-Android-1.6.0.apk) from the same release page.
+PocketGB Android 1.7.0 supports Android 6.0+ on ARM64, ARMv7, x86_64 and x86 devices. It includes the native mGBA core for GB, GBC and GBA, landscape touch controls, hardware-key input, document picker, stereo audio, pause/reset, speed/turbo, save states and battery saves. It supports raw cartridge files, ZIP and 7z archives, and supported PAK containers. The universal APK contains all four native libraries.
 
-The Android build uses the pinned native mGBA core for GB, GBC and GBA games, with a landscape display, touch D-pad/buttons, hardware-key input, Android file picker, stereo audio, pause/reset, speed/turbo, save states and battery saves. It accepts raw cartridge files, ZIP and 7z archives, and `.pak` files when they contain either a ZIP container or a real GB/GBC/GBA ROM image. The universal APK bundles mGBA native libraries for `arm64-v8a`, `armeabi-v7a`, `x86_64` and `x86`.
+Read the [Android install/build guide](android/README.md). For seamless APK upgrades across releases, configure a persistent signing key in GitHub Actions secrets. When CI has to use its one-off fallback key, a later APK signed with a different key cannot update it in place; back up saves before uninstalling.
 
-Read the [Android install/build guide](android/README.md). The APK is signed for installation. For seamless updates across releases, configure a persistent signing key in GitHub Actions secrets; if CI uses its one-off fallback key, uninstall the older APK and back up its saves before installing a differently-signed future build.
+## What's new in 1.7.0
+
+- Safer native mGBA core cleanup when a cartridge core fails to initialise, plus regression tests that repeatedly alternate synthetic GB and GBA games in one emulator session.
+- Recoverable managed frame errors: the affected game pauses while the emulator window stays available.
+- Copyable error reports and persistent managed/native diagnostics, including a notice after restarting following a crash.
+- Reduced framebuffer copies during multi-frame emulation batches and a smaller native mGBA feature set.
+- Compressed single-file managed Windows app, app-local Visual C++ runtime files, and a single-folder portable layout.
+- ZIP and solid LZMA2 7z portable downloads; both keep `PocketGB.exe` and required files together.
 
 ## What's new in 1.6.0
 
