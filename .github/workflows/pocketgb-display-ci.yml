@@ -105,7 +105,7 @@ jobs:
           if (-not $vsRoot) { throw "Visual Studio installation path could not be located." }
           $redistRoot = Join-Path $vsRoot "VC/Redist/MSVC"
           $crtFolder = Get-ChildItem $redistRoot -Directory -Recurse -Filter "Microsoft.VC143.CRT" |
-            Where-Object { $_.Parent.Name -eq 'x64' } |
+            Where-Object { $_.Parent.Name -eq 'x64' } | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1 -ExpandProperty FullName
           $crtFiles = Get-ChildItem $crtFolder -File -Filter "*.dll"
           if (-not $crtFiles) { throw "The MSVC x64 CRT folder contains no runtime DLLs." }
           Copy-Item $crtFiles.FullName ./publish/ -Force
