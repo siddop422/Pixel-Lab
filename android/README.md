@@ -57,8 +57,6 @@ Download [PocketGB-Android-1.7.0.apk](https://github.com/siddop422/Pixel-Lab/rel
 
 ## Signing and updates
 
-## Signing and updates
-
 The APK is signed so Android can install it. For repeatable upgrade installs, configure a persistent signing key in repository Actions secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`. If those secrets are absent, CI creates a one-off signing key; a later APK signed with a different key cannot update it in place. Back up saves before uninstalling an app signed with the one-off key.
 
 ## Compatibility and validation
