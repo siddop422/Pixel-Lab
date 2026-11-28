@@ -54,7 +54,7 @@ jobs:
       - name: Publish Windows x64
         shell: pwsh
         run: |
-          dotnet publish ./vendor/GameboySharp/GameboySharp.csproj -c Release -r win-x64 --self-contained true -p:Version=1.6.0 -p:PublishReadyToRun=false -p:TieredPGO=true -p:DebugType=none -p:DebugSymbols=false -o ./publish
+          dotnet publish ./vendor/GameboySharp/GameboySharp.csproj -c Release -r win-x64 --self-contained true -p:Version=1.7.0 -p:PublishReadyToRun=false -p:TieredPGO=true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=false -p:DebugType=none -p:DebugSymbols=false -o ./publish
           if ($LASTEXITCODE -ne 0) { throw "Publish failed." }
           if (-not (Test-Path ./publish/PocketGB.exe)) { throw "PocketGB.exe missing." }
 
@@ -69,15 +69,43 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "Inno Setup installation failed." }
           }
 
-      - name: Build installer and portable ZIP
+      - name: Ensure 7-Zip is available
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force ./dist | Out-Null
+          $sevenZip = Join-Path $env:ProgramFiles "7-Zip\7z.exe"
+          if (-not (Test-Path $sevenZip)) {
+            choco install 7zip --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { throw "7-Zip installation failed." }
+          }
+          if (-not (Test-Path $sevenZip)) { throw "7z.exe was not found." }
+
+      - name: Build installer and compressed portable folders
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force ./dist/PocketGB | Out-Null
           $compiler = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          & $compiler /DAppVersion="1.6.0" /DPublishDir="..\publish" ./install/PocketGB.iss
+          & $compiler /DAppVersion="1.7.0" /DPublishDir="..\publish" ./install/PocketGB.iss
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed." }
-          if (-not (Test-Path ./dist/PocketGB-Setup-1.6.0.exe)) { throw "Installer missing." }
-          Compress-Archive -Path ./publish/* -DestinationPath ./dist/PocketGB-Portable-1.6.0.zip -CompressionLevel Optimal
+          if (-not (Test-Path ./dist/PocketGB-Setup-1.7.0.exe)) { throw "Installer missing." }
+          if (-not (Test-Path ./publish/PocketGB.exe)) { throw "PocketGB.exe missing from publish output." }
+          if (-not (Test-Path ./publish/pocketgb-mgba.dll)) { throw "Native mGBA engine missing from publish output." }
+
+          # Keep all runtime files in one folder beside the executable.
+          Copy-Item -Path ./publish/* -Destination ./dist/PocketGB -Recurse -Force
+          Copy-Item ./install/START-HERE.txt ./dist/PocketGB/START-HERE.txt -Force
+
+          Compress-Archive -Path ./dist/PocketGB -DestinationPath ./dist/PocketGB-Portable-1.7.0.zip -CompressionLevel Optimal
+          $sevenZip = Join-Path $env:ProgramFiles "7-Zip\7z.exe"
+          Push-Location ./dist
+          try {
+            & $sevenZip a -t7z -mx=9 -m0=lzma2 -ms=on ./PocketGB-Portable-1.7.0.7z ./PocketGB
+            if ($LASTEXITCODE -ne 0) { throw "7-Zip portable archive creation failed." }
+          } finally {
+            Pop-Location
+          }
+
+          $publishBytes = (Get-ChildItem ./dist/PocketGB -File -Recurse | Measure-Object Length -Sum).Sum
+          Write-Host ("Staged portable folder: {0:N2} MiB" -f ($publishBytes / 1MB))
           Get-ChildItem ./dist -File | ForEach-Object {
             $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
             "$hash  $($_.Name)"
@@ -88,34 +116,46 @@ jobs:
         with:
           name: PocketGB-Windows-x64
           path: |
-            dist/PocketGB-Setup-1.6.0.exe
-            dist/PocketGB-Portable-1.6.0.zip
+            dist/PocketGB-Setup-1.7.0.exe
+            dist/PocketGB-Portable-1.7.0.zip
+            dist/PocketGB-Portable-1.7.0.7z
             dist/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish official PocketGB v1.6.0 GitHub Release
-        if: "${{ github.event_name == 'push' && startsWith(github.event.head_commit.message, 'release: PocketGB v1.6.0') }}"
+      - name: Publish official PocketGB v1.7.0 GitHub Release
+        if: "${{ github.event_name == 'push' && startsWith(github.event.head_commit.message, 'release: PocketGB v1.7.0') }}"
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: pocketgb-v1.6.0
+          tag_name: pocketgb-v1.7.0
           target_commitish: main
-          name: PocketGB v1.6.0
+          name: PocketGB v1.7.0
           draft: false
           prerelease: false
           fail_on_unmatched_files: true
           files: |
-            dist/PocketGB-Setup-1.6.0.exe
-            dist/PocketGB-Portable-1.6.0.zip
+            dist/PocketGB-Setup-1.7.0.exe
+            dist/PocketGB-Portable-1.7.0.zip
+            dist/PocketGB-Portable-1.7.0.7z
             dist/SHA256SUMS.txt
           body: |
-            PocketGB 1.6.0 — Windows and Android release.
+            PocketGB 1.7.0 — Windows and Android release.
 
             Downloads:
-            - **PocketGB-Setup-1.6.0.exe** — self-contained per-user installer. It keeps the existing PocketGB application ID and install location so installing 1.6.0 upgrades the existing PocketGB install.
-            - **PocketGB-Portable-1.6.0.zip** — self-contained portable Windows build.
+            - **PocketGB-Setup-1.7.0.exe** — self-contained per-user installer. It keeps the existing PocketGB application ID and install location so installing 1.7.0 upgrades the existing PocketGB install.
+            - **PocketGB-Portable-1.7.0.7z** — maximum-compression LZMA2 portable folder.
+            - **PocketGB-Portable-1.7.0.zip** — portable folder for ZIP-compatible tools.
             - **SHA256SUMS.txt** — SHA-256 checksums for Windows downloads.
-            - **PocketGB-Android-1.6.0.apk** — Android 6.0+ arm64-v8a APK; attached by the Android workflow.
+
+            Stability and packaging:
+            - Failed native mGBA initialisation is cleaned up without calling a deinitializer on an uninitialised core.
+            - Managed frame errors pause emulation and remain recoverable in the app instead of unwinding the message loop.
+            - The mGBA error panel includes a one-click copyable diagnostic report.
+            - Native C/C++ faults are logged to %LOCALAPPDATA%\\PocketGB\\logs\\native-crash.txt.
+            - Managed reports and application logs are saved under %LOCALAPPDATA%\\PocketGB\\logs.
+            - The executable bundles compressed managed assemblies. The native mGBA DLL remains beside PocketGB.exe in a single PocketGB folder.
+            - Both portable archives contain one PocketGB folder with START-HERE.txt and PocketGB.exe.
+            - **PocketGB-Android-1.7.0.apk** — Android 6.0+ arm64-v8a APK; attached by the Android workflow.
             - **SHA256-ANDROID.txt** — SHA-256 checksum for the Android APK.
 
             Display and graphics:
@@ -133,4 +173,4 @@ jobs:
 
             Android: one APK with native mGBA GB/GBC/GBA libraries for arm64-v8a, armeabi-v7a, x86_64 and x86; fullscreen landscape touch controls, Android document picker, AudioTrack output, save states, battery saves, pause/reset and speed/turbo.
 
-            Automated tests, the self-contained Windows publish, Inno Setup compilation and Android APK build/signature verification must pass before v1.6.0 is considered complete. The installer is not Authenticode-signed; use the checksums to verify file integrity and download only from this official GitHub release.
+            Automated tests, the self-contained Windows publish, Inno Setup compilation and Android APK build/signature verification must pass before v1.7.0 is considered complete. The installer is not Authenticode-signed; use the checksums to verify file integrity and download only from this official GitHub release.
