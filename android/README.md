@@ -27,7 +27,9 @@ No commercial ROMs or BIOS dumps are included; mGBA's HLE BIOS defaults are used
   - `x86` — 32-bit x86 Android emulators and devices.
 - Full-screen landscape play, touch D-pad, A/B, L/R, Start and Select buttons.
 - External keyboards and game controllers where Android reports standard key events.
-- Stereo AudioTrack output, pause, reset, speed, turbo, quick save and quick load.
+- Stereo AudioTrack output, pause, reset, normal speed (0.5x / 1x / 2x), quick save and quick load.
+- The **FAST** button cycles turbo speed through 2x, 4x, 6x, 8x, 12x and 16x; **TURBO** toggles fast-forward on and off.
+- During turbo, generated audio is drained without sending it to Android's blocking audio output, and the display is redrawn less often so the CPU can prioritize emulation. Actual speed depends on the device and game.
 - Game ROMs are copied to app-private storage using content-addressed filenames so two different games with the same source filename do not overwrite each other's saves.
 - Battery saves (`.sav`) and quick states (`.state0`) are stored beside the app-private ROM copy.
 
@@ -49,7 +51,7 @@ The build script compiles the core for each ABI declared in `RuntimeIdentifiers`
 
 The native core is pinned to mGBA commit [431935616c0e216d650b25b2ea0c0acccd359038](https://github.com/mgba-emu/mgba/commit/431935616c0e216d650b25b2ea0c0acccd359038) and is licensed under MPL-2.0. The native licence file is packaged in the APK assets.
 
-## Installing the APK
+## Next build\n\nPocketGB Android 1.7.0 is being validated alongside the Windows stability update. The currently published APK remains v1.6.0 until the new universal package passes its ABI, signing and packaging checks.\n\n## Installing the APK
 
 Download `PocketGB-Android-1.6.0.apk` from the [PocketGB v1.6.0 release](https://github.com/siddop422/Pixel-Lab/releases/tag/pocketgb-v1.6.0), enable Android's Install unknown apps permission for the browser/file manager used to open it, then install it. Open PocketGB and press OPEN to choose a ROM from Downloads or another document provider.
 

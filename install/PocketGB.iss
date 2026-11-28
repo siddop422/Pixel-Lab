@@ -43,10 +43,11 @@ Name: "associate"; Description: "Open Game Boy ROM files with PocketGB"; GroupDe
 
 [Files]
 Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "START-HERE.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\PocketGB"; Filename: "{app}\{#AppExeName}"
-Name: "{autodesktop}\PocketGB"; Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
+Name: "{autoprograms}\PocketGB"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"
+Name: "{autodesktop}\PocketGB"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Registry]
 Root: HKCU; Subkey: "Software\Classes\.gb"; ValueType: string; ValueName: ""; ValueData: "PocketGB.GameBoyROM"; Tasks: associate; Flags: uninsdeletevalue

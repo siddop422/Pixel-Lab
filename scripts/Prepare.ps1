@@ -428,12 +428,13 @@ public class Program
 {
     public static void Main(string[] args)
     {
+        CrashReporter.Install();
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Information()
             .Enrich.FromLogContext()
             .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}", restrictedToMinimumLevel: LogEventLevel.Information)
             .WriteTo.File(
-                path: "logs/pocketgb-.log",
+                path: Path.Combine(CrashReporter.LogDirectory, "pocketgb-.log"),
                 rollingInterval: RollingInterval.Day,
                 retainedFileCountLimit: 7,
                 shared: true,
@@ -455,6 +456,7 @@ public class Program
             catch (Exception ex)
             {
                 Log.Error(ex, "Failed to load game file at '{Path}'. Open another game from the toolbar.", args[0]);
+                CrashReporter.WriteException("Load startup game", args[0], ex);
             }
         }
 
@@ -503,17 +505,30 @@ public class Program
                 elapsedSeconds,
                 requestedSpeed,
                 GameboyConstants.FramesPerSecond,
-                paused: !emulator.HasRom || emulator.IsPaused);
+                paused: !emulator.HasRom || emulator.IsPaused || gameWindow.HasRuntimeError);
 
-            if (framesToRun > 0)
+            if (!gameWindow.HasRuntimeError)
             {
-                emulator.RunFrames(framesToRun);
-                gameWindow.RecordEmulatedFrames(framesToRun);
-            }
-            else
-            {
-                // Keep audio serviced while paused or during half-speed fractional intervals.
-                emulator.RunFrames(0);
+                try
+                {
+                    if (framesToRun > 0)
+                    {
+                        emulator.RunFrames(framesToRun);
+                        gameWindow.RecordEmulatedFrames(framesToRun);
+                    }
+                    else
+                    {
+                        // Keep audio serviced while paused or during half-speed fractional intervals.
+                        emulator.RunFrames(0);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // A single-game emulation failure is shown in the window and saved as a
+                    // copyable report instead of closing PocketGB's message loop.
+                    gameWindow.ReportRuntimeError(ex);
+                    framePacer.Reset();
+                }
             }
 
             // During turbo, reduce GL/UI presentation work so the CPU can spend more time

@@ -28,6 +28,7 @@ public sealed class MainActivity : Activity
     private EmulatorSurfaceView? _game;
     private Button? _pauseButton;
     private Button? _speedButton;
+    private Button? _turboSpeedButton;
     private Button? _turboButton;
 
     protected override void OnCreate(Bundle? savedInstanceState)
@@ -56,6 +57,7 @@ public sealed class MainActivity : Activity
         _pauseButton = AddToolbarButton(toolbar, "PAUSE", TogglePause);
         AddToolbarButton(toolbar, "RESET", () => _game?.Reset());
         _speedButton = AddToolbarButton(toolbar, "1x", CycleSpeed);
+        _turboSpeedButton = AddToolbarButton(toolbar, "FAST 4x", CycleTurboSpeed);
         _turboButton = AddToolbarButton(toolbar, "TURBO", ToggleTurbo);
         AddToolbarButton(toolbar, "SAVE", () => RunGameAction(() => _game?.SaveState()));
         AddToolbarButton(toolbar, "LOAD", () => RunGameAction(() => _game?.LoadState()));
@@ -93,11 +95,18 @@ public sealed class MainActivity : Activity
         if (_speedButton != null) _speedButton.Text = $"{_game.SpeedMultiplier:0.##}x";
     }
 
+    private void CycleTurboSpeed()
+    {
+        if (_game == null) return;
+        double speed = _game.CycleTurboSpeed();
+        if (_turboSpeedButton != null) _turboSpeedButton.Text = $"FAST {speed:0.#}x";
+    }
+
     private void ToggleTurbo()
     {
         if (_game == null) return;
         _game.ToggleTurbo();
-        if (_turboButton != null) _turboButton.Text = _game.TurboActive ? "TURBO ON" : "TURBO";
+        if (_turboButton != null) _turboButton.Text = _game.TurboActive ? "FAST ON" : "TURBO";
     }
 
     private void RunGameAction(Action action)

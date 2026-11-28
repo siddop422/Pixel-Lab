@@ -35,6 +35,21 @@ set(BUILD_SUITE OFF CACHE BOOL "" FORCE)
 set(BUILD_CINEMA OFF CACHE BOOL "" FORCE)
 set(ENABLE_DEBUGGERS OFF CACHE BOOL "" FORCE)
 set(ENABLE_SCRIPTING OFF CACHE BOOL "" FORCE)
+
+# The frontend uses its own OpenGL presenter, SDL/OpenAL audio and ZIP resolver.
+# Keep only the native core and bundled 7z reader; omit optional image, database,
+# scripting, video-recording and external archive integrations to shrink the DLL.
+set(USE_FFMPEG OFF CACHE BOOL "" FORCE)
+set(USE_ZLIB OFF CACHE BOOL "" FORCE)
+set(USE_MINIZIP OFF CACHE BOOL "" FORCE)
+set(USE_PNG OFF CACHE BOOL "" FORCE)
+set(USE_LIBZIP OFF CACHE BOOL "" FORCE)
+set(USE_SQLITE3 OFF CACHE BOOL "" FORCE)
+set(USE_LUA OFF CACHE BOOL "" FORCE)
+set(USE_JSON_C OFF CACHE BOOL "" FORCE)
+set(USE_EDITLINE OFF CACHE BOOL "" FORCE)
+set(USE_ELF OFF CACHE BOOL "" FORCE)
+
 # Enable mGBA's bundled 7-Zip virtual filesystem reader on every target.
 set(USE_LZMA ON CACHE BOOL "" FORCE)
 if(ANDROID)
@@ -47,6 +62,13 @@ add_subdirectory("${MGBA_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/mgba")
 
 if(NOT TARGET mgba)
     message(FATAL_ERROR "The pinned mGBA CMake build did not create the mgba core target.")
+endif()
+
+# Explicitly apply the static CRT to both the upstream core and PocketGB shim. This
+# avoids a machine-wide Visual C++ Redistributable dependency for the native adapter.
+if(MSVC)
+    set_property(TARGET mgba PROPERTY
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
 # mCore has conditional fields. Compile the shim with the exact feature defines
@@ -62,6 +84,10 @@ if(NOT MGBA_TARGET_INCLUDE_DIRS)
 endif()
 
 add_library(pocketgb_mgba SHARED mgba_shim.c)
+if(MSVC)
+    set_property(TARGET pocketgb_mgba PROPERTY
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
 target_include_directories(pocketgb_mgba PRIVATE
     ${MGBA_TARGET_INCLUDE_DIRS}
     ${MGBA_DIRECTORY_INCLUDE_DIRS}

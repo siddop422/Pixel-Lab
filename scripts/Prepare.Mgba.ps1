@@ -165,7 +165,14 @@ $window = [System.IO.File]::ReadAllText($windowPath)
 $window = Replace-ExactlyOnce $window '        private readonly Toolbar _toolbar;' @'
         private readonly Toolbar _toolbar;
         public Action<string>? OpenMgbaGameRequested { get; set; }
+        private string _runtimeError = "";
+        public bool HasRuntimeError => !string.IsNullOrWhiteSpace(_runtimeError);
 '@ "mGBA game routing callback"
+
+$window = Replace-ExactlyOnce $window '            _config = config;' @'
+            _config = config;
+            _runtimeError = CrashReporter.GetRecentCrashNotice() ?? "";
+'@ "previous crash notice in GB window"
 
 $loadStart = $window.IndexOf("        private void LoadRomFromUi(string path)")
 $loadEnd = $window.IndexOf("        /// <summary>Tracks a smoothed FPS", $loadStart)
@@ -189,23 +196,97 @@ $newLoadMethod = @'
                 {
                     if (OpenMgbaGameRequested == null)
                         throw new InvalidOperationException("The mGBA window is not available in this build.");
+                    _runtimeError = "";
                     OpenMgbaGameRequested(path);
                     return;
                 }
 
                 _emulator.LoadRom(resolvedPath, path);
+                _runtimeError = "";
                 _config.AddRecentRom(path);
                 ConfigStore.Save(_config);
                 Log.Information("Loaded ROM with GameboySharp: {Path}", path);
             }
             catch (Exception ex)
             {
+                _emulator.Cpu.Pause();
+                _runtimeError = CrashReporter.WriteException("Load Game Boy cartridge", path, ex);
                 Log.Error(ex, "Failed to load ROM: {Path}", path);
             }
         }
 
 '@
 $window = $window.Substring(0, $loadStart) + $newLoadMethod + $window.Substring($loadEnd)
+
+$resetModalAnchor = @'
+                if (ImGui.Button("Reset", new Vector2(120, 0)))
+                {
+                    _emulator.Reset();
+                    ImGui.CloseCurrentPopup();
+                }
+'@
+$resetModalReplacement = @'
+                if (ImGui.Button("Reset", new Vector2(120, 0)))
+                {
+                    try
+                    {
+                        _emulator.Reset();
+                        _runtimeError = "";
+                    }
+                    catch (Exception ex)
+                    {
+                        _runtimeError = CrashReporter.WriteException("Reset Game Boy cartridge", _emulator.CurrentRomName, ex);
+                    }
+                    ImGui.CloseCurrentPopup();
+                }
+'@
+$window = Replace-ExactlyOnce $window $resetModalAnchor $resetModalReplacement "recoverable Game Boy reset action"
+
+$reportMethod = @'
+        public void ReportRuntimeError(Exception exception)
+        {
+            _emulator.Cpu.Pause();
+            _turboActive = false;
+            _runtimeError = CrashReporter.WriteException(
+                "Run Game Boy emulation frame", _emulator.CurrentRomName, exception);
+            Log.Error(exception, "PocketGB stopped Game Boy emulation after a recoverable error.");
+        }
+
+'@
+$window = Replace-ExactlyOnce $window '        private void OnLoad()' ($reportMethod + '        private void OnLoad()') "runtime error reporting method"
+
+$drawAnchor = @'
+            _settingsDialog.Draw();
+            DrawResetConfirm();
+'@
+$drawReplacement = @'
+            _settingsDialog.Draw();
+            DrawResetConfirm();
+            DrawRuntimeError();
+'@
+$window = Replace-ExactlyOnce $window $drawAnchor $drawReplacement "runtime error panel call"
+
+$runtimeErrorUi = @'
+        private void DrawRuntimeError()
+        {
+            if (string.IsNullOrWhiteSpace(_runtimeError)) return;
+            var viewport = ImGui.GetMainViewport();
+            ImGui.SetNextWindowPos(viewport.Pos + new Vector2(16f, Toolbar.HeightPoints + 12f), ImGuiCond.Always);
+            ImGui.SetNextWindowBgAlpha(0.94f);
+            if (ImGui.Begin("PocketGB paused after an error", ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoCollapse))
+            {
+                ImGui.TextWrapped(_runtimeError);
+                if (ImGui.Button("Copy error report"))
+                    ImGui.SetClipboardText(CrashReporter.BuildClipboardText(_runtimeError));
+                ImGui.SameLine();
+                if (ImGui.Button("Dismiss")) _runtimeError = "";
+                ImGui.TextDisabled("The emulator is paused. Open another game to continue.");
+            }
+            ImGui.End();
+        }
+
+'@
+$window = Replace-ExactlyOnce $window '        private void ComputeGameViewport(' ($runtimeErrorUi + '        private void ComputeGameViewport(') "runtime error panel method"
 [System.IO.File]::WriteAllText($windowPath, $window, [System.Text.UTF8Encoding]::new($false))
 
 # Include the managed adapters and built native DLL in the Windows app publish directory.
@@ -277,6 +358,7 @@ $startupBlock = @'
             catch (Exception ex)
             {
                 Log.Error(ex, "Failed to load game file at '{Path}'. Open another game from the toolbar.", args[0]);
+                CrashReporter.WriteException("Load startup cartridge", args[0], ex);
             }
         }
 
@@ -322,6 +404,7 @@ $windowReplacement = @'
             catch (Exception ex)
             {
                 Log.Error(ex, "Could not open the mGBA backend for {Path}", path);
+                CrashReporter.WriteException("Open mGBA backend", path, ex);
                 ReturnToGameboySharp();
             }
         }
@@ -402,7 +485,7 @@ $loop = @'
             double gameFrameRate = useMgba ? mgbaWindow!.NominalFrameRate : GameboyConstants.FramesPerSecond;
             bool paused = useMgba
                 ? !mgbaWindow!.HasRom || mgbaWindow.IsPaused
-                : !emulator.HasRom || emulator.IsPaused;
+                : !emulator.HasRom || emulator.IsPaused || gameWindow.HasRuntimeError;
 
             int framesToRun = framePacer.Consume(elapsedSeconds, requestedSpeed, gameFrameRate, paused);
 
@@ -411,10 +494,19 @@ $loop = @'
                 mgbaWindow!.RunFrames(framesToRun);
                 mgbaWindow.RecordEmulatedFrames(framesToRun);
             }
-            else
+            else if (!gameWindow.HasRuntimeError)
             {
-                emulator.RunFrames(framesToRun);
-                gameWindow.RecordEmulatedFrames(framesToRun);
+                try
+                {
+                    emulator.RunFrames(framesToRun);
+                    gameWindow.RecordEmulatedFrames(framesToRun);
+                }
+                catch (Exception ex)
+                {
+                    // Preserve the window and pause this cartridge instead of exiting the app loop.
+                    gameWindow.ReportRuntimeError(ex);
+                    framePacer.Reset();
+                }
             }
 
             int renderInterval = turbo ? (requestedSpeed >= 8.0 ? 3 : 2) : 1;
@@ -818,5 +910,90 @@ public sealed class MgbaNativeSmokeTests
 
 New-Item -ItemType Directory -Force $testDirectory | Out-Null
 [System.IO.File]::WriteAllText($testPath, $testSource, [System.Text.UTF8Encoding]::new($false))
+
+$reloadTestPath = Join-Path $testDirectory "MgbaNativeReloadTests.cs"
+$reloadTestSource = @'
+using System;
+using System.IO;
+using GameboySharp;
+using Xunit;
+
+namespace GameboySharp.Tests.Native;
+
+public sealed class MgbaNativeReloadTests
+{
+    private static byte[] CreateGbRom()
+    {
+        byte[] rom = new byte[32 * 1024];
+        rom[0x100] = 0x18;
+        rom[0x101] = 0xFE;
+        rom[0x104] = 0xCE;
+        rom[0x105] = 0xED;
+        rom[0x106] = 0x66;
+        rom[0x107] = 0x66;
+        byte[] title = System.Text.Encoding.ASCII.GetBytes("PGB RELOAD GB");
+        Array.Copy(title, 0, rom, 0x134, title.Length);
+        rom[0x147] = 0x00;
+        rom[0x148] = 0x00;
+        rom[0x149] = 0x00;
+        byte checksum = 0;
+        for (int i = 0x134; i <= 0x14C; i++)
+            checksum = (byte)(checksum - rom[i] - 1);
+        rom[0x14D] = checksum;
+        return rom;
+    }
+
+    private static byte[] CreateGbaRom()
+    {
+        byte[] rom = new byte[32 * 1024];
+        rom[0x00] = 0x2E;
+        rom[0x01] = 0x00;
+        rom[0x02] = 0x00;
+        rom[0x03] = 0xEA;
+        rom[0xC0] = 0xFE;
+        rom[0xC1] = 0xFF;
+        rom[0xC2] = 0xFF;
+        rom[0xC3] = 0xEA;
+        rom[0xB2] = 0x96;
+        byte[] title = System.Text.Encoding.ASCII.GetBytes("PGB RELOAD   ");
+        Array.Copy(title, 0, rom, 0xA0, 12);
+        byte[] code = System.Text.Encoding.ASCII.GetBytes("PGRL");
+        Array.Copy(code, 0, rom, 0xAC, 4);
+        return rom;
+    }
+
+    [Fact]
+    public void ReusesNativeContextAcrossRepeatedGbAndGbaLoads()
+    {
+        string? previousAudioSetting = Environment.GetEnvironmentVariable("GBSHARP_AUDIO");
+        Environment.SetEnvironmentVariable("GBSHARP_AUDIO", "none");
+        string gbPath = Path.Combine(Path.GetTempPath(), $"pocketgb-reload-{Guid.NewGuid():N}.gb");
+        string gbaPath = Path.Combine(Path.GetTempPath(), $"pocketgb-reload-{Guid.NewGuid():N}.gba");
+        File.WriteAllBytes(gbPath, CreateGbRom());
+        File.WriteAllBytes(gbaPath, CreateGbaRom());
+
+        try
+        {
+            using var core = new MgbaCore(new EmulatorConfig());
+            for (int i = 0; i < 20; i++)
+            {
+                bool gba = (i & 1) != 0;
+                core.LoadRom(gba ? gbaPath : gbPath);
+                Assert.True(core.HasRom);
+                Assert.Equal(gba ? 240 : 160, core.FrameWidth);
+                Assert.Equal(gba ? 160 : 144, core.FrameHeight);
+                core.RunFrames(3);
+            }
+        }
+        finally
+        {
+            if (File.Exists(gbPath)) File.Delete(gbPath);
+            if (File.Exists(gbaPath)) File.Delete(gbaPath);
+            Environment.SetEnvironmentVariable("GBSHARP_AUDIO", previousAudioSetting);
+        }
+    }
+}
+'@
+[System.IO.File]::WriteAllText($reloadTestPath, $reloadTestSource, [System.Text.UTF8Encoding]::new($false))
 
 Write-Host "Native mGBA GBA frame and save-state smoke test generated." -ForegroundColor Green

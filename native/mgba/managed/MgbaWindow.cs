@@ -34,6 +34,7 @@ internal sealed class MgbaWindow : IDisposable
     private bool _disposed;
     private bool _suppressReturn;
     private bool _turboActive;
+    private bool _emulationFaulted;
     private double _renderFps;
     private double _gameFps;
     private int _gameFramesInSample;
@@ -66,6 +67,7 @@ internal sealed class MgbaWindow : IDisposable
         _imgui = new ImGuiController(_gl, _window, _input);
         _renderer = new MgbaFrameRenderer(_gl, config.Video.UpscaleMode != VideoUpscaleMode.PixelPerfect);
         _core = new MgbaCore(config);
+        _lastError = CrashReporter.GetRecentCrashNotice() ?? "";
 
         string? startDirectory = config.RecentRoms.Count > 0
             ? Path.GetDirectoryName(config.RecentRoms[0])
@@ -94,21 +96,36 @@ internal sealed class MgbaWindow : IDisposable
             _config.AddRecentRom(sourcePath);
             ConfigStore.Save(_config);
             _lastError = "";
+            _emulationFaulted = false;
             _window.Title = $"PocketGB — {_core.GameTitle} — mGBA";
             Log.Information("Loaded with mGBA: {Path}", sourcePath);
         }
         catch (Exception ex)
         {
-            _lastError = ex.Message;
+            _lastError = CrashReporter.WriteException("Load cartridge", sourcePath, ex);
             Log.Error(ex, "mGBA could not load game file {Path}", sourcePath);
         }
     }
 
     public void RunFrames(int frames)
     {
-        if (_disposed) return;
-        _core.Muted = _config.Audio.Muted || (_turboActive && _config.General.MuteDuringTurbo);
-        _core.RunFrames(frames);
+        if (_disposed || _emulationFaulted) return;
+
+        try
+        {
+            _core.Muted = _config.Audio.Muted || (_turboActive && _config.General.MuteDuringTurbo);
+            _core.RunFrames(frames);
+        }
+        catch (Exception ex)
+        {
+            // A native core error reported through the C ABI should stop emulation, not
+            // unwind out of the application message loop and close the whole emulator.
+            _emulationFaulted = true;
+            _core.IsPaused = true;
+            _turboActive = false;
+            _lastError = CrashReporter.WriteException("Run emulation frame", _core.SourcePath, ex);
+            Log.Error(ex, "mGBA stopped emulation for {Path}", _core.SourcePath ?? "(unknown game)");
+        }
     }
 
     public void RecordEmulatedFrames(int frames)
@@ -176,7 +193,7 @@ internal sealed class MgbaWindow : IDisposable
         {
             if (!_core.LoadState()) throw new FileNotFoundException("No mGBA quick-save state exists for this game yet.");
         }, "Load state");
-        if (WasPressed(Key.F9, keyboard)) RunUiAction(_core.Reset, "Reset");
+        if (WasPressed(Key.F9, keyboard)) RunUiAction(ResetCore, "Reset");
     }
 
     private static bool IsDown(Key key, IKeyboard? keyboard) => keyboard?.IsKeyPressed(key) ?? false;
@@ -214,6 +231,15 @@ internal sealed class MgbaWindow : IDisposable
         return down && !previous;
     }
 
+    private void ResetCore()
+    {
+        _core.Reset();
+        _core.IsPaused = false;
+        _emulationFaulted = false;
+        _turboActive = false;
+        _lastError = "";
+    }
+
     private void RunUiAction(Action action, string name)
     {
         try
@@ -224,7 +250,7 @@ internal sealed class MgbaWindow : IDisposable
         }
         catch (Exception ex)
         {
-            _lastError = ex.Message;
+            _lastError = CrashReporter.WriteException(name, _core.SourcePath, ex);
             Log.Warning(ex, "mGBA {Action} failed", name);
         }
     }
@@ -297,7 +323,7 @@ internal sealed class MgbaWindow : IDisposable
             if (ImGui.Button(_core.IsPaused ? "Play" : "Pause"))
                 _core.IsPaused = !_core.IsPaused;
             ImGui.SameLine();
-            if (ImGui.Button("Reset")) RunUiAction(_core.Reset, "Reset");
+            if (ImGui.Button("Reset")) RunUiAction(ResetCore, "Reset");
             ImGui.SameLine();
             if (ImGui.Button("Save")) RunUiAction(_core.SaveState, "Save state");
             ImGui.SameLine();
@@ -358,6 +384,14 @@ internal sealed class MgbaWindow : IDisposable
         if (ImGui.Begin("mGBA message", ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoCollapse))
         {
             ImGui.TextWrapped(_lastError);
+            if (ImGui.Button("Copy error report"))
+                ImGui.SetClipboardText(CrashReporter.BuildClipboardText(_lastError));
+            if (_core.HasRom && _emulationFaulted)
+            {
+                ImGui.SameLine();
+                if (ImGui.Button("Reset and retry")) RunUiAction(ResetCore, "Reset and retry");
+            }
+            ImGui.SameLine();
             if (ImGui.Button("Dismiss")) _lastError = "";
         }
         ImGui.End();

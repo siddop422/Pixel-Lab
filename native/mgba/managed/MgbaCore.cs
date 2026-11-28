@@ -78,6 +78,7 @@ internal sealed unsafe class MgbaCore : IDisposable
     public string GameTitle { get; private set; } = "(no game)";
     public string GameCode { get; private set; } = "";
     public string PlatformName { get; private set; } = "mGBA";
+    public string? SourcePath => _sourcePath;
     public int FrameWidth { get; private set; } = 160;
     public int FrameHeight { get; private set; } = 144;
     public double NominalFrameRate { get; private set; } = 59.7275;
@@ -211,12 +212,15 @@ internal sealed unsafe class MgbaCore : IDisposable
             if (pgb_mgba_run_frame(_context) == 0)
                 throw new InvalidOperationException(GetLastError());
 
-            FrameWidth = pgb_mgba_video_width(_context);
-            FrameHeight = pgb_mgba_video_height(_context);
-            EnsureFrameBuffer();
-            CopyVideoFrame();
             _framesSinceBatterySave++;
         }
+
+        // The frontend presents only the most recent frame in a batch. Copy it once after
+        // all native frames have run, instead of repeatedly moving the full framebuffer.
+        FrameWidth = pgb_mgba_video_width(_context);
+        FrameHeight = pgb_mgba_video_height(_context);
+        EnsureFrameBuffer();
+        CopyVideoFrame();
 
         PumpAudio();
         if (_framesSinceBatterySave >= 600)
@@ -271,7 +275,14 @@ internal sealed unsafe class MgbaCore : IDisposable
         if (!HasRom || string.IsNullOrWhiteSpace(_saveStatePath) || !File.Exists(_saveStatePath))
             return false;
 
+        var stateInfo = new FileInfo(_saveStatePath);
+        if (!stateInfo.Exists || stateInfo.Length <= 0 || stateInfo.Length > 64L * 1024L * 1024L)
+            return false;
+
         byte[] state = File.ReadAllBytes(_saveStatePath);
+        if (state.Length == 0 || state.Length > 64 * 1024 * 1024)
+            return false;
+
         unsafe
         {
             fixed (byte* source = state)
