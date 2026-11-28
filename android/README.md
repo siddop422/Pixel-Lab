@@ -51,7 +51,7 @@ The build script compiles the core for each ABI declared in `RuntimeIdentifiers`
 
 The native core is pinned to mGBA commit [431935616c0e216d650b25b2ea0c0acccd359038](https://github.com/mgba-emu/mgba/commit/431935616c0e216d650b25b2ea0c0acccd359038) and is licensed under MPL-2.0. The native licence file is packaged in the APK assets.
 
-## Installing the APK
+## Next build\n\nPocketGB Android 1.7.0 is being validated alongside the Windows stability update. The currently published APK remains v1.6.0 until the new universal package passes its ABI, signing and packaging checks.\n\n## Installing the APK
 
 Download `PocketGB-Android-1.6.0.apk` from the [PocketGB v1.6.0 release](https://github.com/siddop422/Pixel-Lab/releases/tag/pocketgb-v1.6.0), enable Android's Install unknown apps permission for the browser/file manager used to open it, then install it. Open PocketGB and press OPEN to choose a ROM from Downloads or another document provider.
 
