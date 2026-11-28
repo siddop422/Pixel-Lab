@@ -44,7 +44,7 @@ jobs:
       - name: Verify the native engine does not need the VC++ redistributable
         shell: pwsh
         run: |
-          $nativeDll = Resolve-Path ./artifacts/native/win-x64/pocketgb-mgba.dll
+          $nativeDll = (Resolve-Path ./artifacts/native/win-x64/pocketgb-mgba.dll).Path
           $dumpbin = Get-Command dumpbin.exe -ErrorAction SilentlyContinue
           if (-not $dumpbin) {
             $vswhere = Join-Path "${env:ProgramFiles(x86)}" "Microsoft Visual Studio/Installer/vswhere.exe"
@@ -52,285 +52,24 @@ jobs:
               $vsRoot = & $vswhere -latest -products '*' -property installationPath
               if ($vsRoot) {
                 $dumpbin = Get-ChildItem (Join-Path $vsRoot "VC/Tools/MSVC") -Filter dumpbin.exe -Recurse -ErrorAction SilentlyContinue |
-                  Where-Object { $_.FullName -match '\\Hostx64\\x64\\dumpbin\.exe
-        env:
-          GBSHARP_AUDIO: none
-          PGB_MGBA_NATIVE_DLL: ${{ github.workspace }}/artifacts/native/win-x64/pocketgb-mgba.dll
-        shell: pwsh
-        run: dotnet test ./vendor/GameboySharp/GameboySharp.sln -c Release
-
-      - name: Test shared cross-platform cartridge loader
-        run: dotnet test ./shared.tests/PocketGB.Shared.Tests.csproj -c Release --verbosity normal
-
-      - name: Publish Windows x64
-        shell: pwsh
-        run: |
-          dotnet publish ./vendor/GameboySharp/GameboySharp.csproj -c Release -r win-x64 --self-contained true -p:Version=1.7.0 -p:PublishReadyToRun=false -p:TieredPGO=true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=false -p:DebugType=none -p:DebugSymbols=false -o ./publish
-          if ($LASTEXITCODE -ne 0) { throw "Publish failed." }
-          if (-not (Test-Path ./publish/PocketGB.exe)) { throw "PocketGB.exe missing." }
-
-      - name: Ensure Inno Setup is available
-        shell: pwsh
-        run: |
-          $compiler = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          if (Test-Path $compiler) {
-            Write-Host "Using preinstalled Inno Setup compiler: $compiler"
-          } else {
-            choco install innosetup --yes --no-progress
-            if ($LASTEXITCODE -ne 0) { throw "Inno Setup installation failed." }
-          }
-
-      - name: Ensure 7-Zip is available
-        shell: pwsh
-        run: |
-          $sevenZip = Join-Path $env:ProgramFiles "7-Zip\7z.exe"
-          if (-not (Test-Path $sevenZip)) {
-            choco install 7zip --yes --no-progress
-            if ($LASTEXITCODE -ne 0) { throw "7-Zip installation failed." }
-          }
-          if (-not (Test-Path $sevenZip)) { throw "7z.exe was not found." }
-
-      - name: Build installer and compressed portable folders
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force ./dist/PocketGB | Out-Null
-          $compiler = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          & $compiler /DAppVersion="1.7.0" /DPublishDir="..\publish" ./install/PocketGB.iss
-          if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed." }
-          if (-not (Test-Path ./dist/PocketGB-Setup-1.7.0.exe)) { throw "Installer missing." }
-          if (-not (Test-Path ./publish/PocketGB.exe)) { throw "PocketGB.exe missing from publish output." }
-          if (-not (Test-Path ./publish/pocketgb-mgba.dll)) { throw "Native mGBA engine missing from publish output." }
-
-          # Keep all runtime files in one folder beside the executable.
-          Copy-Item -Path ./publish/* -Destination ./dist/PocketGB -Recurse -Force
-          Copy-Item ./install/START-HERE.txt ./dist/PocketGB/START-HERE.txt -Force
-
-          Compress-Archive -Path ./dist/PocketGB -DestinationPath ./dist/PocketGB-Portable-1.7.0.zip -CompressionLevel Optimal
-          $sevenZip = Join-Path $env:ProgramFiles "7-Zip\7z.exe"
-          Push-Location ./dist
-          try {
-            & $sevenZip a -t7z -mx=9 -m0=lzma2 -ms=on ./PocketGB-Portable-1.7.0.7z ./PocketGB
-            if ($LASTEXITCODE -ne 0) { throw "7-Zip portable archive creation failed." }
-          } finally {
-            Pop-Location
-          }
-
-          $publishBytes = (Get-ChildItem ./dist/PocketGB -File -Recurse | Measure-Object Length -Sum).Sum
-          Write-Host ("Staged portable folder: {0:N2} MiB" -f ($publishBytes / 1MB))
-          Get-ChildItem ./dist -File | ForEach-Object {
-            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-            "$hash  $($_.Name)"
-          } | Set-Content ./dist/SHA256SUMS.txt -Encoding ascii
-
-      - name: Upload Windows installer, portable build and checksums
-        uses: actions/upload-artifact@v4
-        with:
-          name: PocketGB-Windows-x64
-          path: |
-            dist/PocketGB-Setup-1.7.0.exe
-            dist/PocketGB-Portable-1.7.0.zip
-            dist/PocketGB-Portable-1.7.0.7z
-            dist/SHA256SUMS.txt
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Publish official PocketGB v1.7.0 GitHub Release
-        if: "${{ github.event_name == 'push' && startsWith(github.event.head_commit.message, 'release: PocketGB v1.7.0') }}"
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: pocketgb-v1.7.0
-          target_commitish: main
-          name: PocketGB v1.7.0
-          draft: false
-          prerelease: false
-          fail_on_unmatched_files: true
-          files: |
-            dist/PocketGB-Setup-1.7.0.exe
-            dist/PocketGB-Portable-1.7.0.zip
-            dist/PocketGB-Portable-1.7.0.7z
-            dist/SHA256SUMS.txt
-          body: |
-            PocketGB 1.7.0 — Windows and Android release.
-
-            Downloads:
-            - **PocketGB-Setup-1.7.0.exe** — self-contained per-user installer. It keeps the existing PocketGB application ID and install location so installing 1.7.0 upgrades the existing PocketGB install.
-            - **PocketGB-Portable-1.7.0.7z** — maximum-compression LZMA2 portable folder.
-            - **PocketGB-Portable-1.7.0.zip** — portable folder for ZIP-compatible tools.
-            - **SHA256SUMS.txt** — SHA-256 checksums for Windows downloads.
-
-            Stability and packaging:
-            - Failed native mGBA initialisation is cleaned up without calling a deinitializer on an uninitialised core.
-            - Managed frame errors pause emulation and remain recoverable in the app instead of unwinding the message loop.
-            - The mGBA error panel includes a one-click copyable diagnostic report.
-            - Native C/C++ faults are logged to %LOCALAPPDATA%\\PocketGB\\logs\\native-crash.txt.
-            - Managed reports and application logs are saved under %LOCALAPPDATA%\\PocketGB\\logs.
-            - The executable bundles compressed managed assemblies. The native mGBA DLL remains beside PocketGB.exe in a single PocketGB folder.
-            - Both portable archives contain one PocketGB folder with START-HERE.txt and PocketGB.exe.
-            - **PocketGB-Android-1.7.0.apk** — Android 6.0+ arm64-v8a APK; attached by the Android workflow.
-            - **SHA256-ANDROID.txt** — SHA-256 checksum for the Android APK.
-
-            Display and graphics:
-            - Custom window dimensions, fullscreen, V-Sync, nearest/bilinear/sharp-bilinear scaling.
-            - LCD grid, scanlines, CRT vignette/curvature, brightness and saturation controls.
-            - Low-end profile to disable optional effects.
-            - OpenGL 3.3 is the only implemented graphics API. Audio backend options are Auto, SDL and OpenAL.
-            - Temporal frame blending is an experimental visual blend, not motion-vector frame generation or FPS doubling.
-
-            Compatibility:
-            - Native mGBA core for Game Boy Advance, Game Boy and Game Boy Color; Auto prefers mGBA for .gba/.gb/.gbc/.sgb.
-            - GameboySharp remains selectable as a manual GB/GBC fallback with its existing save-state and debugger tools.
-            - mGBA supports a broad set of common and uncommon GBA/GB cartridge types, but compatibility is not guaranteed for every game, mapper, peripheral or ROM hack.
-            - Special GameboySharp ROM-size header codes 0x52, 0x53 and 0x54 remain handled.
-
-            Android: one APK with native mGBA GB/GBC/GBA libraries for arm64-v8a, armeabi-v7a, x86_64 and x86; fullscreen landscape touch controls, Android document picker, AudioTrack output, save states, battery saves, pause/reset and speed/turbo.
-
-            Automated tests, the self-contained Windows publish, Inno Setup compilation and Android APK build/signature verification must pass before v1.7.0 is considered complete. The installer is not Authenticode-signed; use the checksums to verify file integrity and download only from this official GitHub release.
- } |
+                  Where-Object { $_.FullName -like '*\Hostx64\x64\dumpbin.exe' } |
                   Sort-Object FullName -Descending | Select-Object -First 1
               }
             }
           }
-          if (-not $dumpbin) { throw "Could not locate dumpbin.exe to inspect native DLL dependencies." }
-          $dumpbinPath = if ($dumpbin.Source) { $dumpbin.Source } else { $dumpbin.FullName }
-          $dependencies = & $dumpbinPath /DEPENDENTS $nativeDll.Path | Out-String
-          Write-Host $dependencies
-          if ($dependencies -match '(?im)^\s*(VCRUNTIME|MSVCP)\d+(_\d+)?\.dll\s*
-        env:
-          GBSHARP_AUDIO: none
-          PGB_MGBA_NATIVE_DLL: ${{ github.workspace }}/artifacts/native/win-x64/pocketgb-mgba.dll
-        shell: pwsh
-        run: dotnet test ./vendor/GameboySharp/GameboySharp.sln -c Release
-
-      - name: Test shared cross-platform cartridge loader
-        run: dotnet test ./shared.tests/PocketGB.Shared.Tests.csproj -c Release --verbosity normal
-
-      - name: Publish Windows x64
-        shell: pwsh
-        run: |
-          dotnet publish ./vendor/GameboySharp/GameboySharp.csproj -c Release -r win-x64 --self-contained true -p:Version=1.7.0 -p:PublishReadyToRun=false -p:TieredPGO=true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=false -p:DebugType=none -p:DebugSymbols=false -o ./publish
-          if ($LASTEXITCODE -ne 0) { throw "Publish failed." }
-          if (-not (Test-Path ./publish/PocketGB.exe)) { throw "PocketGB.exe missing." }
-
-      - name: Ensure Inno Setup is available
-        shell: pwsh
-        run: |
-          $compiler = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          if (Test-Path $compiler) {
-            Write-Host "Using preinstalled Inno Setup compiler: $compiler"
+          if (-not $dumpbin) {
+            Write-Warning "dumpbin.exe was not found; skipping the optional dependency listing."
           } else {
-            choco install innosetup --yes --no-progress
-            if ($LASTEXITCODE -ne 0) { throw "Inno Setup installation failed." }
+            $dumpbinPath = if ($dumpbin.Source) { $dumpbin.Source } else { $dumpbin.FullName }
+            $dependencies = (& $dumpbinPath /DEPENDENTS $nativeDll | Out-String).ToLowerInvariant()
+            Write-Host $dependencies
+            $runtimeDlls = @("vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll", "msvcp140_1.dll", "concrt140.dll")
+            foreach ($runtimeDll in $runtimeDlls) {
+              if ($dependencies.Contains($runtimeDll)) {
+                throw "The native engine still imports $runtimeDll; the static CRT build did not take effect."
+              }
+            }
           }
-
-      - name: Ensure 7-Zip is available
-        shell: pwsh
-        run: |
-          $sevenZip = Join-Path $env:ProgramFiles "7-Zip\7z.exe"
-          if (-not (Test-Path $sevenZip)) {
-            choco install 7zip --yes --no-progress
-            if ($LASTEXITCODE -ne 0) { throw "7-Zip installation failed." }
-          }
-          if (-not (Test-Path $sevenZip)) { throw "7z.exe was not found." }
-
-      - name: Build installer and compressed portable folders
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force ./dist/PocketGB | Out-Null
-          $compiler = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          & $compiler /DAppVersion="1.7.0" /DPublishDir="..\publish" ./install/PocketGB.iss
-          if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed." }
-          if (-not (Test-Path ./dist/PocketGB-Setup-1.7.0.exe)) { throw "Installer missing." }
-          if (-not (Test-Path ./publish/PocketGB.exe)) { throw "PocketGB.exe missing from publish output." }
-          if (-not (Test-Path ./publish/pocketgb-mgba.dll)) { throw "Native mGBA engine missing from publish output." }
-
-          # Keep all runtime files in one folder beside the executable.
-          Copy-Item -Path ./publish/* -Destination ./dist/PocketGB -Recurse -Force
-          Copy-Item ./install/START-HERE.txt ./dist/PocketGB/START-HERE.txt -Force
-
-          Compress-Archive -Path ./dist/PocketGB -DestinationPath ./dist/PocketGB-Portable-1.7.0.zip -CompressionLevel Optimal
-          $sevenZip = Join-Path $env:ProgramFiles "7-Zip\7z.exe"
-          Push-Location ./dist
-          try {
-            & $sevenZip a -t7z -mx=9 -m0=lzma2 -ms=on ./PocketGB-Portable-1.7.0.7z ./PocketGB
-            if ($LASTEXITCODE -ne 0) { throw "7-Zip portable archive creation failed." }
-          } finally {
-            Pop-Location
-          }
-
-          $publishBytes = (Get-ChildItem ./dist/PocketGB -File -Recurse | Measure-Object Length -Sum).Sum
-          Write-Host ("Staged portable folder: {0:N2} MiB" -f ($publishBytes / 1MB))
-          Get-ChildItem ./dist -File | ForEach-Object {
-            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-            "$hash  $($_.Name)"
-          } | Set-Content ./dist/SHA256SUMS.txt -Encoding ascii
-
-      - name: Upload Windows installer, portable build and checksums
-        uses: actions/upload-artifact@v4
-        with:
-          name: PocketGB-Windows-x64
-          path: |
-            dist/PocketGB-Setup-1.7.0.exe
-            dist/PocketGB-Portable-1.7.0.zip
-            dist/PocketGB-Portable-1.7.0.7z
-            dist/SHA256SUMS.txt
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Publish official PocketGB v1.7.0 GitHub Release
-        if: "${{ github.event_name == 'push' && startsWith(github.event.head_commit.message, 'release: PocketGB v1.7.0') }}"
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: pocketgb-v1.7.0
-          target_commitish: main
-          name: PocketGB v1.7.0
-          draft: false
-          prerelease: false
-          fail_on_unmatched_files: true
-          files: |
-            dist/PocketGB-Setup-1.7.0.exe
-            dist/PocketGB-Portable-1.7.0.zip
-            dist/PocketGB-Portable-1.7.0.7z
-            dist/SHA256SUMS.txt
-          body: |
-            PocketGB 1.7.0 — Windows and Android release.
-
-            Downloads:
-            - **PocketGB-Setup-1.7.0.exe** — self-contained per-user installer. It keeps the existing PocketGB application ID and install location so installing 1.7.0 upgrades the existing PocketGB install.
-            - **PocketGB-Portable-1.7.0.7z** — maximum-compression LZMA2 portable folder.
-            - **PocketGB-Portable-1.7.0.zip** — portable folder for ZIP-compatible tools.
-            - **SHA256SUMS.txt** — SHA-256 checksums for Windows downloads.
-
-            Stability and packaging:
-            - Failed native mGBA initialisation is cleaned up without calling a deinitializer on an uninitialised core.
-            - Managed frame errors pause emulation and remain recoverable in the app instead of unwinding the message loop.
-            - The mGBA error panel includes a one-click copyable diagnostic report.
-            - Native C/C++ faults are logged to %LOCALAPPDATA%\\PocketGB\\logs\\native-crash.txt.
-            - Managed reports and application logs are saved under %LOCALAPPDATA%\\PocketGB\\logs.
-            - The executable bundles compressed managed assemblies. The native mGBA DLL remains beside PocketGB.exe in a single PocketGB folder.
-            - Both portable archives contain one PocketGB folder with START-HERE.txt and PocketGB.exe.
-            - **PocketGB-Android-1.7.0.apk** — Android 6.0+ arm64-v8a APK; attached by the Android workflow.
-            - **SHA256-ANDROID.txt** — SHA-256 checksum for the Android APK.
-
-            Display and graphics:
-            - Custom window dimensions, fullscreen, V-Sync, nearest/bilinear/sharp-bilinear scaling.
-            - LCD grid, scanlines, CRT vignette/curvature, brightness and saturation controls.
-            - Low-end profile to disable optional effects.
-            - OpenGL 3.3 is the only implemented graphics API. Audio backend options are Auto, SDL and OpenAL.
-            - Temporal frame blending is an experimental visual blend, not motion-vector frame generation or FPS doubling.
-
-            Compatibility:
-            - Native mGBA core for Game Boy Advance, Game Boy and Game Boy Color; Auto prefers mGBA for .gba/.gb/.gbc/.sgb.
-            - GameboySharp remains selectable as a manual GB/GBC fallback with its existing save-state and debugger tools.
-            - mGBA supports a broad set of common and uncommon GBA/GB cartridge types, but compatibility is not guaranteed for every game, mapper, peripheral or ROM hack.
-            - Special GameboySharp ROM-size header codes 0x52, 0x53 and 0x54 remain handled.
-
-            Android: one APK with native mGBA GB/GBC/GBA libraries for arm64-v8a, armeabi-v7a, x86_64 and x86; fullscreen landscape touch controls, Android document picker, AudioTrack output, save states, battery saves, pause/reset and speed/turbo.
-
-            Automated tests, the self-contained Windows publish, Inno Setup compilation and Android APK build/signature verification must pass before v1.7.0 is considered complete. The installer is not Authenticode-signed; use the checksums to verify file integrity and download only from this official GitHub release.
-) {
-            throw "The native engine still depends on the dynamic Visual C++ runtime."
-          }
-
       - name: Run tests
         env:
           GBSHARP_AUDIO: none
