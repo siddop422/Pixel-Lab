@@ -85,11 +85,14 @@ internal static class CrashReporter
                 if (changed > latest) { latest = changed; latestPath = path; }
             }
 
-            // Only surface recent failures; old logs stay available without warning on every launch.
-            if (latestPath == null || latest < DateTime.UtcNow.AddDays(-2))
+            // Show only new crash records; retain older logs quietly for later troubleshooting.
+            if (latestPath == null || latest < DateTime.UtcNow.AddHours(-36))
                 return null;
 
-            return $"PocketGB recorded an error during a previous run. Details: {latestPath}";
+            string kind = Path.GetFileName(latestPath) == "native-crash.txt"
+                ? "native C/C++ runtime error"
+                : "managed application error";
+            return $"A {kind} was recorded during a previous run. Click Copy error report to copy its details.";
         }
         catch { return null; }
     }
