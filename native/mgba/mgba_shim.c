@@ -18,6 +18,123 @@
 #include <string.h>
 
 #if defined(_WIN32)
+#include <windows.h>
+#include <signal.h>
+#include <process.h>
+#if defined(_MSC_VER)
+#include <crtdbg.h>
+#include <eh.h>
+#endif
+
+static char g_active_operation[256] = "native library startup";
+static volatile LONG g_crash_handlers_installed = 0;
+
+static void pgb_set_operation(const char* operation) {
+    if (!operation) operation = "unknown native operation";
+    snprintf(g_active_operation, sizeof(g_active_operation), "%s", operation);
+}
+
+static void pgb_native_crash_path(char* path, size_t capacity) {
+    char base[MAX_PATH] = { 0 };
+    DWORD length = GetEnvironmentVariableA("LOCALAPPDATA", base, MAX_PATH);
+    if (length == 0 || length >= MAX_PATH) {
+        length = GetTempPathA(MAX_PATH, base);
+        if (length == 0 || length >= MAX_PATH) snprintf(base, sizeof(base), ".");
+    }
+
+    char app_directory[MAX_PATH];
+    char log_directory[MAX_PATH];
+    snprintf(app_directory, sizeof(app_directory), "%s\\PocketGB", base);
+    snprintf(log_directory, sizeof(log_directory), "%s\\logs", app_directory);
+    CreateDirectoryA(app_directory, NULL);
+    CreateDirectoryA(log_directory, NULL);
+    snprintf(path, capacity, "%s\\native-crash.txt", log_directory);
+}
+
+static void pgb_write_native_crash(const char* kind, const char* details) {
+    char path[MAX_PATH];
+    pgb_native_crash_path(path, sizeof(path));
+    FILE* output = fopen(path, "ab");
+    if (!output) return;
+
+    SYSTEMTIME now;
+    GetLocalTime(&now);
+    fprintf(output,
+        "[%04u-%02u-%02u %02u:%02u:%02u.%03u] %s\\r\\n"
+        "Operation: %s\\r\\n"
+        "Details: %s\\r\\n\\r\\n",
+        now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond, now.wMilliseconds,
+        kind ? kind : "Native failure",
+        g_active_operation,
+        details ? details : "No additional details");
+    fclose(output);
+}
+
+#if defined(_MSC_VER)
+static void pgb_wide_to_utf8(const wchar_t* source, char* destination, int capacity) {
+    if (!destination || capacity <= 0) return;
+    destination[0] = '\0';
+    if (!source) return;
+    WideCharToMultiByte(CP_UTF8, 0, source, -1, destination, capacity, NULL, NULL);
+}
+
+static void __cdecl pgb_invalid_parameter(
+    const wchar_t* expression, const wchar_t* function,
+    const wchar_t* file, unsigned int line, uintptr_t reserved) {
+    char expression_text[256], function_text[256], file_text[256], details[900];
+    (void)reserved;
+    pgb_wide_to_utf8(expression, expression_text, sizeof(expression_text));
+    pgb_wide_to_utf8(function, function_text, sizeof(function_text));
+    pgb_wide_to_utf8(file, file_text, sizeof(file_text));
+    snprintf(details, sizeof(details),
+        "MSVC invalid-parameter handler. Expression: %s; Function: %s; File: %s; Line: %u",
+        expression_text, function_text, file_text, line);
+    pgb_write_native_crash("MSVC C/C++ runtime invalid parameter", details);
+}
+
+static void __cdecl pgb_purecall(void) {
+    pgb_write_native_crash("MSVC pure virtual call", "The native runtime detected a pure virtual function call.");
+    _exit(134);
+}
+#endif
+
+static void pgb_abort_signal(int signal_number) {
+    char details[128];
+    snprintf(details, sizeof(details), "Native abort signal: %d", signal_number);
+    pgb_write_native_crash("Native abort", details);
+    _exit(128 + signal_number);
+}
+
+static LONG WINAPI pgb_unhandled_exception(EXCEPTION_POINTERS* exception_info) {
+    char details[256];
+    if (exception_info && exception_info->ExceptionRecord) {
+        snprintf(details, sizeof(details), "Windows exception 0x%08lX at address %p",
+            (unsigned long)exception_info->ExceptionRecord->ExceptionCode,
+            exception_info->ExceptionRecord->ExceptionAddress);
+    } else {
+        snprintf(details, sizeof(details), "Windows reported an unhandled native exception.");
+    }
+    pgb_write_native_crash("Unhandled Windows native exception", details);
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
+static void pgb_install_native_crash_handlers(void) {
+    if (InterlockedCompareExchange(&g_crash_handlers_installed, 1, 0) != 0) return;
+#if defined(_MSC_VER)
+    _set_invalid_parameter_handler(pgb_invalid_parameter);
+    _set_purecall_handler(pgb_purecall);
+    _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+#endif
+    signal(SIGABRT, pgb_abort_signal);
+    SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+    SetUnhandledExceptionFilter(pgb_unhandled_exception);
+}
+#else
+static void pgb_set_operation(const char* operation) { (void)operation; }
+static void pgb_install_native_crash_handlers(void) { }
+#endif
+
+#if defined(_WIN32)
 #define PGB_EXPORT __declspec(dllexport)
 #else
 #define PGB_EXPORT __attribute__((visibility("default")))
@@ -37,6 +154,7 @@ typedef struct PgbMgbaContext {
     unsigned video_width;
     unsigned video_height;
     int config_initialized;
+    int core_initialized;
     int rom_loaded;
     char error[512];
     char title[32];
@@ -71,10 +189,17 @@ static int load_rom_file(PgbMgbaContext* ctx, struct VFile* rom_file) {
     ctx->config_initialized = 1;
 
     if (!ctx->core->init(ctx->core)) {
+        /*
+         * The pinned GB/GBA core init routines clean up their own partial memory-map
+         * allocations when they return false. Their deinit routines require a fully
+         * initialised CPU/board pair, so release_core must free only the outer core
+         * allocation in this failure case rather than calling core->deinit.
+         */
         rom_file->close(rom_file);
-        set_error(ctx, "mGBA failed to initialise the selected emulation core.");
+        set_error(ctx, "mGBA could not initialise the cartridge core. Close other applications and try again.");
         return 0;
     }
+    ctx->core_initialized = 1;
 
     /* Use mGBA's HLE BIOS by default. No copyrighted BIOS image is bundled. */
     struct mCoreOptions defaults;
@@ -125,14 +250,25 @@ static void release_core(PgbMgbaContext* ctx) {
     if (!ctx) return;
 
     if (ctx->core) {
-        if (ctx->rom_loaded && ctx->core->unloadROM) {
-            ctx->core->unloadROM(ctx->core);
-        }
-        if (ctx->config_initialized) {
-            mCoreConfigDeinit(&ctx->core->config);
-        }
-        if (ctx->core->deinit) {
-            ctx->core->deinit(ctx->core);
+        if (ctx->core_initialized) {
+            if (ctx->rom_loaded && ctx->core->unloadROM) {
+                ctx->core->unloadROM(ctx->core);
+            }
+            if (ctx->config_initialized) {
+                mCoreConfigDeinit(&ctx->core->config);
+            }
+            if (ctx->core->deinit) {
+                /* GBACoreDeinit/GBCoreDeinit also release the outer mCore allocation. */
+                ctx->core->deinit(ctx->core);
+            } else {
+                free(ctx->core);
+            }
+        } else {
+            if (ctx->config_initialized) {
+                mCoreConfigDeinit(&ctx->core->config);
+            }
+            /* Never call core->deinit on an unsuccessful core->init result. */
+            free(ctx->core);
         }
         ctx->core = NULL;
     }
@@ -158,6 +294,7 @@ static void release_core(PgbMgbaContext* ctx) {
     ctx->video_width = 0;
     ctx->video_height = 0;
     ctx->config_initialized = 0;
+    ctx->core_initialized = 0;
     ctx->rom_loaded = 0;
     ctx->platform = mPLATFORM_NONE;
     ctx->title[0] = '\0';
@@ -165,6 +302,8 @@ static void release_core(PgbMgbaContext* ctx) {
 }
 
 PGB_EXPORT void* pgb_mgba_create(void) {
+    pgb_install_native_crash_handlers();
+    pgb_set_operation("Create mGBA context");
     PgbMgbaContext* ctx = (PgbMgbaContext*)calloc(1, sizeof(PgbMgbaContext));
     if (!ctx) return NULL;
     ctx->platform = mPLATFORM_NONE;
@@ -172,6 +311,7 @@ PGB_EXPORT void* pgb_mgba_create(void) {
 }
 
 PGB_EXPORT void pgb_mgba_destroy(void* handle) {
+    pgb_set_operation("Destroy mGBA context");
     PgbMgbaContext* ctx = (PgbMgbaContext*)handle;
     if (!ctx) return;
     release_core(ctx);
@@ -184,6 +324,7 @@ PGB_EXPORT const char* pgb_mgba_last_error(void* handle) {
 }
 
 PGB_EXPORT int pgb_mgba_load_rom(void* handle, const uint8_t* rom, size_t rom_bytes) {
+    pgb_set_operation("Load raw cartridge image");
     PgbMgbaContext* ctx = (PgbMgbaContext*)handle;
     if (!ctx || !rom || rom_bytes == 0 || rom_bytes > (32u * 1024u * 1024u)) {
         set_error(ctx, "Invalid ROM data (expected 1 byte to 32 MiB).");
@@ -275,6 +416,7 @@ static struct VFile* find_cartridge_in_archive_directory(
  * rather than trusting a filename extension in an archive.
  */
 PGB_EXPORT int pgb_mgba_load_7z_file(void* handle, const char* path) {
+    pgb_set_operation("Load 7z cartridge archive");
     PgbMgbaContext* ctx = (PgbMgbaContext*)handle;
     if (!ctx || !path || !path[0]) {
         set_error(ctx, "A 7z archive path is required.");
@@ -310,6 +452,7 @@ PGB_EXPORT int pgb_mgba_load_7z_file(void* handle, const char* path) {
 
 /* Apply an IPS, UPS or BPS sidecar patch using the active mGBA platform's patch loader. */
 PGB_EXPORT int pgb_mgba_apply_patch(void* handle, const uint8_t* patch_data, size_t patch_bytes) {
+    pgb_set_operation("Apply cartridge patch");
     PgbMgbaContext* ctx = (PgbMgbaContext*)handle;
     if (!ctx || !ctx->core || !ctx->rom_loaded || !patch_data ||
         patch_bytes == 0 || patch_bytes > (32u * 1024u * 1024u)) {
@@ -342,6 +485,7 @@ PGB_EXPORT int pgb_mgba_apply_patch(void* handle, const uint8_t* patch_data, siz
 }
 
 PGB_EXPORT int pgb_mgba_run_frame(void* handle) {
+    pgb_set_operation("Execute game frame");
     PgbMgbaContext* ctx = (PgbMgbaContext*)handle;
     if (!ctx || !ctx->core || !ctx->rom_loaded) return 0;
 
@@ -438,6 +582,7 @@ PGB_EXPORT size_t pgb_mgba_state_size(void* handle) {
 }
 
 PGB_EXPORT int pgb_mgba_save_state(void* handle, void* destination, size_t capacity) {
+    pgb_set_operation("Write save state");
     PgbMgbaContext* ctx = (PgbMgbaContext*)handle;
     if (!ctx || !ctx->core || !destination) return 0;
     if (capacity < ctx->core->stateSize(ctx->core)) return 0;
@@ -445,6 +590,7 @@ PGB_EXPORT int pgb_mgba_save_state(void* handle, void* destination, size_t capac
 }
 
 PGB_EXPORT int pgb_mgba_load_state(void* handle, const void* source, size_t size) {
+    pgb_set_operation("Load save state");
     PgbMgbaContext* ctx = (PgbMgbaContext*)handle;
     if (!ctx || !ctx->core || !source) return 0;
     if (size != ctx->core->stateSize(ctx->core)) return 0;
