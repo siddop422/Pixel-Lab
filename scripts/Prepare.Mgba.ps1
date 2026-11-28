@@ -169,6 +169,11 @@ $window = Replace-ExactlyOnce $window '        private readonly Toolbar _toolbar
         public bool HasRuntimeError => !string.IsNullOrWhiteSpace(_runtimeError);
 '@ "mGBA game routing callback"
 
+$window = Replace-ExactlyOnce $window '            _config = config;' @'
+            _config = config;
+            _runtimeError = CrashReporter.GetRecentCrashNotice() ?? "";
+'@ "previous crash notice in GB window"
+
 $loadStart = $window.IndexOf("        private void LoadRomFromUi(string path)")
 $loadEnd = $window.IndexOf("        /// <summary>Tracks a smoothed FPS", $loadStart)
 if ($loadStart -lt 0 -or $loadEnd -lt 0 -or $loadEnd -le $loadStart) {
