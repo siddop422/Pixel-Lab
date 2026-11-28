@@ -428,12 +428,13 @@ public class Program
 {
     public static void Main(string[] args)
     {
+        CrashReporter.Install();
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Information()
             .Enrich.FromLogContext()
             .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}", restrictedToMinimumLevel: LogEventLevel.Information)
             .WriteTo.File(
-                path: "logs/pocketgb-.log",
+                path: Path.Combine(CrashReporter.LogDirectory, "pocketgb-.log"),
                 rollingInterval: RollingInterval.Day,
                 retainedFileCountLimit: 7,
                 shared: true,
@@ -455,6 +456,7 @@ public class Program
             catch (Exception ex)
             {
                 Log.Error(ex, "Failed to load game file at '{Path}'. Open another game from the toolbar.", args[0]);
+                CrashReporter.WriteException("Load startup game", args[0], ex);
             }
         }
 
