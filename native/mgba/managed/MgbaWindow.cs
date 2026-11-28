@@ -67,6 +67,7 @@ internal sealed class MgbaWindow : IDisposable
         _imgui = new ImGuiController(_gl, _window, _input);
         _renderer = new MgbaFrameRenderer(_gl, config.Video.UpscaleMode != VideoUpscaleMode.PixelPerfect);
         _core = new MgbaCore(config);
+        _lastError = CrashReporter.GetRecentCrashNotice() ?? "";
 
         string? startDirectory = config.RecentRoms.Count > 0
             ? Path.GetDirectoryName(config.RecentRoms[0])
