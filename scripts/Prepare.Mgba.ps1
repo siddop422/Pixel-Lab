@@ -459,7 +459,7 @@ $loop = @'
             double gameFrameRate = useMgba ? mgbaWindow!.NominalFrameRate : GameboyConstants.FramesPerSecond;
             bool paused = useMgba
                 ? !mgbaWindow!.HasRom || mgbaWindow.IsPaused
-                : !emulator.HasRom || emulator.IsPaused;
+                : !emulator.HasRom || emulator.IsPaused || gameWindow.HasRuntimeError;
 
             int framesToRun = framePacer.Consume(elapsedSeconds, requestedSpeed, gameFrameRate, paused);
 
@@ -468,10 +468,19 @@ $loop = @'
                 mgbaWindow!.RunFrames(framesToRun);
                 mgbaWindow.RecordEmulatedFrames(framesToRun);
             }
-            else
+            else if (!gameWindow.HasRuntimeError)
             {
-                emulator.RunFrames(framesToRun);
-                gameWindow.RecordEmulatedFrames(framesToRun);
+                try
+                {
+                    emulator.RunFrames(framesToRun);
+                    gameWindow.RecordEmulatedFrames(framesToRun);
+                }
+                catch (Exception ex)
+                {
+                    // Preserve the window and pause this cartridge instead of exiting the app loop.
+                    gameWindow.ReportRuntimeError(ex);
+                    framePacer.Reset();
+                }
             }
 
             int renderInterval = turbo ? (requestedSpeed >= 8.0 ? 3 : 2) : 1;
