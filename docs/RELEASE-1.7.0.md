@@ -1,8 +1,8 @@
 # PocketGB 1.7.0
 
-**Status:** In development; CI validation required before publishing.
+**Status:** Released November 28, 2026. Windows and Android CI passed.
 
-## Planned downloads
+## Downloads
 
 - `PocketGB-Setup-1.7.0.exe` — Windows 10/11 x64 per-user installer.
 - `PocketGB-Portable-1.7.0.7z` — LZMA2 maximum-compression portable folder.
@@ -33,9 +33,9 @@ A fatal memory-corruption exception in native code cannot safely be resumed in t
 
 The installer keeps the existing application ID and installation directory so v1.7.0 upgrades an existing PocketGB installation.
 
-## Validation gate
+## Validation results
 
-Before release, CI must pass:
+The release checks completed successfully:
 
 - Native mGBA core build and native GB/GBC/GBA load, frame, save-state and repeated GB/GBA reload tests.
 - Shared ZIP/PAK/7z loader tests and corrupt/oversized input checks.
