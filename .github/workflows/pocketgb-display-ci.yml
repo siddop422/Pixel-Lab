@@ -87,6 +87,41 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Publish failed." }
           if (-not (Test-Path ./publish/PocketGB.exe)) { throw "PocketGB.exe missing." }
 
+          # Native code must stay beside PocketGB.exe; keep it out of the single-file bundle
+          # so Windows can resolve it directly through the normal DLL search path.
+          New-Item -ItemType Directory -Force ./publish/licenses | Out-Null
+          $nativeDll = "./artifacts/native/win-x64/pocketgb-mgba.dll"
+          if (-not (Test-Path $nativeDll)) { throw "Built native mGBA engine is missing: $nativeDll" }
+          Copy-Item $nativeDll ./publish/pocketgb-mgba.dll -Force
+          Copy-Item ./artifacts/native/win-x64/mGBA-BUILD.txt ./publish/mGBA-BUILD.txt -Force
+          Copy-Item ./artifacts/native/win-x64/licenses/mGBA-MPL-2.0.txt ./publish/licenses/mGBA-MPL-2.0.txt -Force
+
+          # App-local Microsoft VC runtime: SDL3/GLFW native assets can use the
+          # MSVC dynamic runtime. Ship official x64 CRT DLLs beside the EXE so
+          # users do not need a separate Visual C++ Redistributable installation.
+          $vswhere = Join-Path "${env:ProgramFiles(x86)}" "Microsoft Visual Studio/Installer/vswhere.exe"
+          if (-not (Test-Path $vswhere)) { throw "Visual Studio locator was not found; cannot stage the VC runtime." }
+          $vsRoot = & $vswhere -latest -products '*' -property installationPath
+          if (-not $vsRoot) { throw "Visual Studio installation path could not be located." }
+          $redistRoot = Join-Path $vsRoot "VC/Redist/MSVC"
+          $crtFolder = Get-ChildItem $redistRoot -Directory | Sort-Object { [version]$_.Name } -Descending |
+            ForEach-Object { Join-Path $_.FullName "x64/Microsoft.VC143.CRT" } |
+            Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $crtFolder) { throw "The x64 Microsoft.VC143.CRT redist folder was not found." }
+          $crtFiles = Get-ChildItem $crtFolder -File -Filter "*.dll"
+          if (-not $crtFiles) { throw "The MSVC x64 CRT folder contains no runtime DLLs." }
+          Copy-Item $crtFiles.FullName ./publish/ -Force
+          $redistVersionFolder = Split-Path (Split-Path $crtFolder -Parent) -Parent
+          $redistNotice = Join-Path $redistVersionFolder "redist.txt"
+          if (Test-Path $redistNotice) {
+            Copy-Item $redistNotice ./publish/licenses/VC-Redist-redist.txt -Force
+          }
+          Write-Host ("Staged {0} app-local Visual C++ runtime DLLs." -f $crtFiles.Count)
+
+          if (-not (Test-Path ./publish/pocketgb-mgba.dll)) {
+            throw "Native mGBA engine was not staged beside PocketGB.exe."
+          }
+
       - name: Ensure Inno Setup is available
         shell: pwsh
         run: |
