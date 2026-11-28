@@ -35,6 +35,21 @@ set(BUILD_SUITE OFF CACHE BOOL "" FORCE)
 set(BUILD_CINEMA OFF CACHE BOOL "" FORCE)
 set(ENABLE_DEBUGGERS OFF CACHE BOOL "" FORCE)
 set(ENABLE_SCRIPTING OFF CACHE BOOL "" FORCE)
+
+# The frontend uses its own OpenGL presenter, SDL/OpenAL audio and ZIP resolver.
+# Keep only the native core and bundled 7z reader; omit optional image, database,
+# scripting, video-recording and external archive integrations to shrink the DLL.
+set(USE_FFMPEG OFF CACHE BOOL "" FORCE)
+set(USE_ZLIB OFF CACHE BOOL "" FORCE)
+set(USE_MINIZIP OFF CACHE BOOL "" FORCE)
+set(USE_PNG OFF CACHE BOOL "" FORCE)
+set(USE_LIBZIP OFF CACHE BOOL "" FORCE)
+set(USE_SQLITE3 OFF CACHE BOOL "" FORCE)
+set(USE_LUA OFF CACHE BOOL "" FORCE)
+set(USE_JSON_C OFF CACHE BOOL "" FORCE)
+set(USE_EDITLINE OFF CACHE BOOL "" FORCE)
+set(USE_ELF OFF CACHE BOOL "" FORCE)
+
 # Enable mGBA's bundled 7-Zip virtual filesystem reader on every target.
 set(USE_LZMA ON CACHE BOOL "" FORCE)
 if(ANDROID)
