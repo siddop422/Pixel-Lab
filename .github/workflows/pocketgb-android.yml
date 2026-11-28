@@ -111,18 +111,18 @@ jobs:
               -validity 10000 -dname "CN=PocketGB Android Release"
           fi
           BUILD_TOOLS="$ANDROID_HOME/build-tools/36.0.0"
-          "$BUILD_TOOLS/zipalign" -f -v 4 "$APK" dist/android/PocketGB-Android-1.6.0.apk
+          "$BUILD_TOOLS/zipalign" -f -v 4 "$APK" dist/android/PocketGB-Android-1.7.0.apk
           "$BUILD_TOOLS/apksigner" sign --ks "$KEYSTORE" --ks-key-alias "$KEY_ALIAS" \
             --ks-pass "pass:$STORE_PASS" --key-pass "pass:$KEY_PASS" \
-            dist/android/PocketGB-Android-1.6.0.apk
-          "$BUILD_TOOLS/apksigner" verify --verbose dist/android/PocketGB-Android-1.6.0.apk
+            dist/android/PocketGB-Android-1.7.0.apk
+          "$BUILD_TOOLS/apksigner" verify --verbose dist/android/PocketGB-Android-1.7.0.apk
 
           # Verify the final signed package contains the native mGBA library for every ABI.
           for abi in arm64-v8a armeabi-v7a x86_64 x86; do
-            unzip -Z1 dist/android/PocketGB-Android-1.6.0.apk | grep -Fx "lib/$abi/libpocketgb-mgba.so"
+            unzip -Z1 dist/android/PocketGB-Android-1.7.0.apk | grep -Fx "lib/$abi/libpocketgb-mgba.so"
           done
 
-          (cd dist/android && sha256sum PocketGB-Android-1.6.0.apk > SHA256-ANDROID.txt)
+          (cd dist/android && sha256sum PocketGB-Android-1.7.0.apk > SHA256-ANDROID.txt)
           ls -lh dist/android
 
       - name: Upload Android package
@@ -130,23 +130,23 @@ jobs:
         with:
           name: PocketGB-Android-multi-ABI
           path: |
-            dist/android/PocketGB-Android-1.6.0.apk
+            dist/android/PocketGB-Android-1.7.0.apk
             dist/android/SHA256-ANDROID.txt
           if-no-files-found: error
           retention-days: 30
 
-      - name: Wait for the matching Windows v1.6.0 release
-        if: "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'release: PocketGB v1.6.0') }}"
+      - name: Wait for the matching Windows v1.7.0 release
+        if: "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'release: PocketGB v1.7.0') }}"
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          API="https://api.github.com/repos/$GITHUB_REPOSITORY/releases/tags/pocketgb-v1.6.0"
+          API="https://api.github.com/repos/$GITHUB_REPOSITORY/releases/tags/pocketgb-v1.7.0"
           for attempt in $(seq 1 90); do
             if curl --fail --silent --show-error \
               -H "Authorization: Bearer $GH_TOKEN" \
               -H "Accept: application/vnd.github+json" "$API" >/dev/null; then
-              echo "PocketGB v1.6.0 release exists; uploading Android APK."
+              echo "PocketGB v1.7.0 release exists; uploading Android APK."
               exit 0
             fi
             sleep 10
@@ -154,11 +154,11 @@ jobs:
           echo "Timed out waiting for the Windows release workflow." >&2
           exit 1
 
-      - name: Attach Android APK to PocketGB v1.6.0 release
-        if: "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'release: PocketGB v1.6.0') }}"
+      - name: Attach Android APK to PocketGB v1.7.0 release
+        if: "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'release: PocketGB v1.7.0') }}"
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: pocketgb-v1.6.0
+          tag_name: pocketgb-v1.7.0
           files: |
-            dist/android/PocketGB-Android-1.6.0.apk
+            dist/android/PocketGB-Android-1.7.0.apk
             dist/android/SHA256-ANDROID.txt
