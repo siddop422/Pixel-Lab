@@ -1,0 +1,26 @@
+POCKETGB — PORTABLE WINDOWS BUILD
+
+1. Open the PocketGB folder.
+2. Double-click PocketGB.exe.
+3. Keep the other files in this folder; pocketgb-mgba.dll and the runtime support files are required.
+
+Open a legally obtained .gb, .gbc, .sgb or .gba cartridge with the Open button or drag the game onto the window.
+
+DEFAULT CONTROLS
+Arrow keys: D-pad
+Z / X: A / B
+Enter / Right Shift: Start / Select
+A / S: GBA L / R
+Space: Pause / resume
+Hold Tab: Fast-forward
+F5 / F8: Quick save / load
+F9: Reset in the mGBA window
+
+DIAGNOSTICS
+When a managed emulator error occurs, use the Copy error report button in the mGBA window.
+Persistent reports are saved here:
+%LOCALAPPDATA%\PocketGB\logs\last-error.txt
+Native C/C++ runtime failures are recorded here:
+%LOCALAPPDATA%\PocketGB\logs\native-crash.txt
+
+Keep the original game file and its save files backed up. PocketGB does not include commercial ROMs or BIOS files.
