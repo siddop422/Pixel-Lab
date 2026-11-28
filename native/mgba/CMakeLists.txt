@@ -64,6 +64,13 @@ if(NOT TARGET mgba)
     message(FATAL_ERROR "The pinned mGBA CMake build did not create the mgba core target.")
 endif()
 
+# Explicitly apply the static CRT to both the upstream core and PocketGB shim. This
+# avoids a machine-wide Visual C++ Redistributable dependency for the native adapter.
+if(MSVC)
+    set_property(TARGET mgba PROPERTY
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
+
 # mCore has conditional fields. Compile the shim with the exact feature defines
 # and include paths of the upstream library to keep the C ABI layout identical.
 get_target_property(MGBA_TARGET_DEFINITIONS mgba COMPILE_DEFINITIONS)
@@ -77,6 +84,10 @@ if(NOT MGBA_TARGET_INCLUDE_DIRS)
 endif()
 
 add_library(pocketgb_mgba SHARED mgba_shim.c)
+if(MSVC)
+    set_property(TARGET pocketgb_mgba PROPERTY
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
 target_include_directories(pocketgb_mgba PRIVATE
     ${MGBA_TARGET_INCLUDE_DIRS}
     ${MGBA_DIRECTORY_INCLUDE_DIRS}
