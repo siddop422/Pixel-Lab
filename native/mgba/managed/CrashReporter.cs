@@ -32,12 +32,12 @@ internal static class CrashReporter
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
         {
             string details = args.ExceptionObject?.ToString() ?? "Unknown unhandled exception.";
-            WriteText("Unhandled process exception", details);
+            WriteHeading("Unhandled process exception", details);
         };
 
         TaskScheduler.UnobservedTaskException += (_, args) =>
         {
-            WriteText("Unobserved task exception", args.Exception.ToString());
+            WriteHeading("Unobserved task exception", args.Exception.ToString());
             args.SetObserved();
         };
     }
@@ -55,14 +55,14 @@ internal static class CrashReporter
         report.AppendLine($"Runtime: {Environment.Version}");
         report.AppendLine();
         report.AppendLine(exception.ToString());
-        WriteText(LastErrorPath, report.ToString());
+        WriteFile(LastErrorPath, report.ToString());
         return $"{operation} failed: {exception.Message}\nDiagnostic report: {LastErrorPath}";
     }
 
-    private static void WriteText(string heading, string details) =>
-        WriteText(LastErrorPath, $"PocketGB diagnostic report\r\nTime (UTC): {DateTime.UtcNow:O}\r\n{heading}\r\n\r\n{details}");
+    private static void WriteHeading(string heading, string details) =>
+        WriteFile(LastErrorPath, $"PocketGB diagnostic report\r\nTime (UTC): {DateTime.UtcNow:O}\r\n{heading}\r\n\r\n{details}");
 
-    private static void WriteText(string path, string contents)
+    private static void WriteFile(string path, string contents)
     {
         try
         {
