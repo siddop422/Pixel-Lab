@@ -209,6 +209,7 @@ $newLoadMethod = @'
             }
             catch (Exception ex)
             {
+                _emulator.Cpu.Pause();
                 _runtimeError = CrashReporter.WriteException("Load Game Boy cartridge", path, ex);
                 Log.Error(ex, "Failed to load ROM: {Path}", path);
             }
@@ -216,6 +217,30 @@ $newLoadMethod = @'
 
 '@
 $window = $window.Substring(0, $loadStart) + $newLoadMethod + $window.Substring($loadEnd)
+
+$resetModalAnchor = @'
+                if (ImGui.Button("Reset", new Vector2(120, 0)))
+                {
+                    _emulator.Reset();
+                    ImGui.CloseCurrentPopup();
+                }
+'@
+$resetModalReplacement = @'
+                if (ImGui.Button("Reset", new Vector2(120, 0)))
+                {
+                    try
+                    {
+                        _emulator.Reset();
+                        _runtimeError = "";
+                    }
+                    catch (Exception ex)
+                    {
+                        _runtimeError = CrashReporter.WriteException("Reset Game Boy cartridge", _emulator.CurrentRomName, ex);
+                    }
+                    ImGui.CloseCurrentPopup();
+                }
+'@
+$window = Replace-ExactlyOnce $window $resetModalAnchor $resetModalReplacement "recoverable Game Boy reset action"
 
 $reportMethod = @'
         public void ReportRuntimeError(Exception exception)
