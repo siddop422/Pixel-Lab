@@ -277,6 +277,7 @@ $startupBlock = @'
             catch (Exception ex)
             {
                 Log.Error(ex, "Failed to load game file at '{Path}'. Open another game from the toolbar.", args[0]);
+                CrashReporter.WriteException("Load startup cartridge", args[0], ex);
             }
         }
 
@@ -322,6 +323,7 @@ $windowReplacement = @'
             catch (Exception ex)
             {
                 Log.Error(ex, "Could not open the mGBA backend for {Path}", path);
+                CrashReporter.WriteException("Open mGBA backend", path, ex);
                 ReturnToGameboySharp();
             }
         }
@@ -818,5 +820,90 @@ public sealed class MgbaNativeSmokeTests
 
 New-Item -ItemType Directory -Force $testDirectory | Out-Null
 [System.IO.File]::WriteAllText($testPath, $testSource, [System.Text.UTF8Encoding]::new($false))
+
+$reloadTestPath = Join-Path $testDirectory "MgbaNativeReloadTests.cs"
+$reloadTestSource = @'
+using System;
+using System.IO;
+using GameboySharp;
+using Xunit;
+
+namespace GameboySharp.Tests.Native;
+
+public sealed class MgbaNativeReloadTests
+{
+    private static byte[] CreateGbRom()
+    {
+        byte[] rom = new byte[32 * 1024];
+        rom[0x100] = 0x18;
+        rom[0x101] = 0xFE;
+        rom[0x104] = 0xCE;
+        rom[0x105] = 0xED;
+        rom[0x106] = 0x66;
+        rom[0x107] = 0x66;
+        byte[] title = System.Text.Encoding.ASCII.GetBytes("PGB RELOAD GB");
+        Array.Copy(title, 0, rom, 0x134, title.Length);
+        rom[0x147] = 0x00;
+        rom[0x148] = 0x00;
+        rom[0x149] = 0x00;
+        byte checksum = 0;
+        for (int i = 0x134; i <= 0x14C; i++)
+            checksum = (byte)(checksum - rom[i] - 1);
+        rom[0x14D] = checksum;
+        return rom;
+    }
+
+    private static byte[] CreateGbaRom()
+    {
+        byte[] rom = new byte[32 * 1024];
+        rom[0x00] = 0x2E;
+        rom[0x01] = 0x00;
+        rom[0x02] = 0x00;
+        rom[0x03] = 0xEA;
+        rom[0xC0] = 0xFE;
+        rom[0xC1] = 0xFF;
+        rom[0xC2] = 0xFF;
+        rom[0xC3] = 0xEA;
+        rom[0xB2] = 0x96;
+        byte[] title = System.Text.Encoding.ASCII.GetBytes("PGB RELOAD   ");
+        Array.Copy(title, 0, rom, 0xA0, 12);
+        byte[] code = System.Text.Encoding.ASCII.GetBytes("PGRL");
+        Array.Copy(code, 0, rom, 0xAC, 4);
+        return rom;
+    }
+
+    [Fact]
+    public void ReusesNativeContextAcrossRepeatedGbAndGbaLoads()
+    {
+        string? previousAudioSetting = Environment.GetEnvironmentVariable("GBSHARP_AUDIO");
+        Environment.SetEnvironmentVariable("GBSHARP_AUDIO", "none");
+        string gbPath = Path.Combine(Path.GetTempPath(), $"pocketgb-reload-{Guid.NewGuid():N}.gb");
+        string gbaPath = Path.Combine(Path.GetTempPath(), $"pocketgb-reload-{Guid.NewGuid():N}.gba");
+        File.WriteAllBytes(gbPath, CreateGbRom());
+        File.WriteAllBytes(gbaPath, CreateGbaRom());
+
+        try
+        {
+            using var core = new MgbaCore(new EmulatorConfig());
+            for (int i = 0; i < 20; i++)
+            {
+                bool gba = (i & 1) != 0;
+                core.LoadRom(gba ? gbaPath : gbPath);
+                Assert.True(core.HasRom);
+                Assert.Equal(gba ? 240 : 160, core.FrameWidth);
+                Assert.Equal(gba ? 160 : 144, core.FrameHeight);
+                core.RunFrames(3);
+            }
+        }
+        finally
+        {
+            if (File.Exists(gbPath)) File.Delete(gbPath);
+            if (File.Exists(gbaPath)) File.Delete(gbaPath);
+            Environment.SetEnvironmentVariable("GBSHARP_AUDIO", previousAudioSetting);
+        }
+    }
+}
+'@
+[System.IO.File]::WriteAllText($reloadTestPath, $reloadTestSource, [System.Text.UTF8Encoding]::new($false))
 
 Write-Host "Native mGBA GBA frame and save-state smoke test generated." -ForegroundColor Green
