@@ -212,12 +212,15 @@ internal sealed unsafe class MgbaCore : IDisposable
             if (pgb_mgba_run_frame(_context) == 0)
                 throw new InvalidOperationException(GetLastError());
 
-            FrameWidth = pgb_mgba_video_width(_context);
-            FrameHeight = pgb_mgba_video_height(_context);
-            EnsureFrameBuffer();
-            CopyVideoFrame();
             _framesSinceBatterySave++;
         }
+
+        // The frontend presents only the most recent frame in a batch. Copy it once after
+        // all native frames have run, instead of repeatedly moving the full framebuffer.
+        FrameWidth = pgb_mgba_video_width(_context);
+        FrameHeight = pgb_mgba_video_height(_context);
+        EnsureFrameBuffer();
+        CopyVideoFrame();
 
         PumpAudio();
         if (_framesSinceBatterySave >= 600)
