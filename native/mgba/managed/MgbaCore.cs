@@ -78,6 +78,7 @@ internal sealed unsafe class MgbaCore : IDisposable
     public string GameTitle { get; private set; } = "(no game)";
     public string GameCode { get; private set; } = "";
     public string PlatformName { get; private set; } = "mGBA";
+    public string? SourcePath => _sourcePath;
     public int FrameWidth { get; private set; } = 160;
     public int FrameHeight { get; private set; } = 144;
     public double NominalFrameRate { get; private set; } = 59.7275;
@@ -271,7 +272,14 @@ internal sealed unsafe class MgbaCore : IDisposable
         if (!HasRom || string.IsNullOrWhiteSpace(_saveStatePath) || !File.Exists(_saveStatePath))
             return false;
 
+        var stateInfo = new FileInfo(_saveStatePath);
+        if (!stateInfo.Exists || stateInfo.Length <= 0 || stateInfo.Length > 64L * 1024L * 1024L)
+            return false;
+
         byte[] state = File.ReadAllBytes(_saveStatePath);
+        if (state.Length == 0 || state.Length > 64 * 1024 * 1024)
+            return false;
+
         unsafe
         {
             fixed (byte* source = state)
