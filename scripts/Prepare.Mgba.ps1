@@ -196,6 +196,7 @@ $newLoadMethod = @'
                 {
                     if (OpenMgbaGameRequested == null)
                         throw new InvalidOperationException("The mGBA window is not available in this build.");
+                    _runtimeError = "";
                     OpenMgbaGameRequested(path);
                     return;
                 }
